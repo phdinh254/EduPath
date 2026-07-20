@@ -1,0 +1,377 @@
+// Lộ Trình 12 AI — schema cơ sở dữ liệu chính
+// Xem docs/PROJECT.md để biết đầy đủ ngữ cảnh nghiệp vụ
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE // trắc nghiệm nhiều lựa chọn, 0.25đ/câu
+  TRUE_FALSE // đúng/sai, thang điểm lũy tiến theo số ý đúng
+  SHORT_ANSWER // trắc nghiệm trả lời ngắn
+  ESSAY // tự luận (Ngữ văn), chấm qua luồng AI riêng
+}
+
+enum DifficultyLevel {
+  KNOWLEDGE // nhận biết
+  COMPREHENSION // thông hiểu
+  APPLICATION // vận dụng
+  HIGH_APPLICATION // vận dụng cao
+}
+
+enum ContentStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum StudentClassStatus {
+  ACTIVE
+  REMOVED
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+enum RoadmapStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+// ---------- Core: User / Tenant / Class ----------
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  dateOfBirth  DateTime?
+  isActive     Boolean @default(true)
+
+  // Giáo viên/trung tâm sở hữu đúng một tenant (phạm vi dữ liệu riêng của họ)
+  ownedTenant Tenant?
+
+  studentClasses   StudentClass[]
+  createdQuestions Question[]     @relation("QuestionCreatedBy")
+  createdExams     Exam[]         @relation("ExamCreatedBy")
+  examAttempts     ExamAttempt[]
+  teacherReviews   TeacherReview[]
+  refreshTokens    RefreshToken[]
+  auditLogs        AuditLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Mỗi giáo viên/trung tâm là một tenant riêng, sở hữu các lớp và nội dung riêng.
+model Tenant {
+  id      String @id @default(cuid())
+  name    String
+  ownerId String @unique
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  classes   Class[]
+  questions Question[]
+  exams     Exam[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Class {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name     String
+  // Mã lớp dùng để học sinh tự tham gia
+  inviteCode String @unique
+
+  studentClasses StudentClass[]
+  exams          Exam[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+// Quan hệ nhiều-nhiều giữa học sinh và lớp — một học sinh có thể thuộc nhiều lớp/trung tâm cùng lúc.
+model StudentClass {
+  id        String              @id @default(cuid())
+  studentId String
+  student   User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class               @relation(fields: [classId], references: [id], onDelete: Cascade)
+  status    StudentClassStatus  @default(ACTIVE)
+  joinedAt  DateTime            @default(now())
+  removedAt DateTime?
+
+  @@unique([studentId, classId])
+  @@index([classId])
+  @@index([studentId])
+}
+
+// ---------- Subjects / Topics / Questions ----------
+
+model Subject {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  topics    Topic[]
+  questions Question[]
+  exams     Exam[]
+
+  createdAt DateTime @default(now())
+}
+
+model Topic {
+  id            String  @id @default(cuid())
+  subjectId     String
+  subject       Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  name          String
+  parentTopicId String?
+  parentTopic   Topic?  @relation("TopicHierarchy", fields: [parentTopicId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  childTopics   Topic[] @relation("TopicHierarchy")
+
+  questions Question[]
+
+  createdAt DateTime @default(now())
+
+  @@index([subjectId])
+}
+
+// Ngân hàng câu hỏi. tenantId = null nghĩa là thuộc kho dùng chung (do admin quản lý).
+model Question {
+  id         String          @id @default(cuid())
+  subjectId  String
+  subject    Subject         @relation(fields: [subjectId], references: [id])
+  topicId    String
+  topic      Topic           @relation(fields: [topicId], references: [id])
+  type       QuestionType
+  difficulty DifficultyLevel
+  content    String
+  // Đáp án lựa chọn (multiple choice / true-false), null với short answer/essay
+  options       Json?
+  // Đáp án đúng, cấu trúc tuỳ theo `type`
+  correctAnswer Json?
+  explanation   String?
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("QuestionCreatedBy", fields: [createdById], references: [id])
+
+  // isGlobal=true + status=APPROVED nghĩa là câu hỏi đã vào kho dùng chung toàn hệ thống
+  isGlobal Boolean       @default(false)
+  status   ContentStatus @default(DRAFT)
+
+  examQuestions ExamQuestion[]
+  answers       Answer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([subjectId, topicId])
+  @@index([tenantId])
+  @@index([status])
+}
+
+// ---------- Exams ----------
+
+model Exam {
+  id       String  @id @default(cuid())
+  title    String
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id])
+
+  // tenantId/classId = null nghĩa là đề chính thức/dùng chung
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  classId  String?
+  class    Class?  @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  createdById     String
+  createdBy       User    @relation("ExamCreatedBy", fields: [createdById], references: [id])
+  durationMinutes Int
+
+  examQuestions ExamQuestion[]
+  attempts      ExamAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([subjectId])
+  @@index([tenantId])
+}
+
+// Join table: một câu hỏi có thể được tái sử dụng ở nhiều đề với thứ tự/điểm khác nhau.
+model ExamQuestion {
+  id         String   @id @default(cuid())
+  examId     String
+  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  order      Int
+  maxScore   Float
+
+  @@unique([examId, questionId])
+  @@index([examId])
+}
+
+model ExamAttempt {
+  id          String        @id @default(cuid())
+  examId      String
+  exam        Exam          @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status      AttemptStatus @default(IN_PROGRESS)
+  startedAt   DateTime      @default(now())
+  submittedAt DateTime?
+  totalScore  Float?
+
+  answers            Answer[]
+  score              Score?
+  weaknessAnalyses   WeaknessAnalysis[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([examId])
+  @@index([studentId])
+}
+
+model Answer {
+  id         String      @id @default(cuid())
+  attemptId  String
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question    @relation(fields: [questionId], references: [id])
+
+  // Câu trả lời của học sinh, cấu trúc tuỳ theo loại câu hỏi
+  response Json?
+
+  // Chấm tự động (trắc nghiệm/đúng-sai/trả lời ngắn)
+  isCorrect    Boolean?
+  scoreAwarded Float?
+
+  // Chấm sơ bộ bằng AI (tự luận Ngữ văn)
+  aiPreliminaryScore   Float?
+  aiComment            String?
+  isAiReferenceOnly    Boolean @default(false)
+
+  teacherReview TeacherReview?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+// Điểm giáo viên duyệt/điều chỉnh lại cho câu trả lời tự luận đã được AI chấm sơ bộ
+model TeacherReview {
+  id             String   @id @default(cuid())
+  answerId       String   @unique
+  answer         Answer   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  teacherId      String
+  teacher        User     @relation(fields: [teacherId], references: [id])
+  originalAiScore Float?
+  finalScore     Float
+  comment        String?
+  reviewedAt     DateTime @default(now())
+}
+
+// Điểm tổng hợp của một lượt làm bài, kèm phân tích theo chuyên đề để làm đầu vào cho AI
+model Score {
+  id         String      @id @default(cuid())
+  attemptId  String      @unique
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  totalScore Float
+  // Tỷ lệ đúng theo topic/chuyên đề: { topicId: { correct, total } }
+  topicBreakdown Json
+  gradedAt   DateTime    @default(now())
+}
+
+// ---------- AI cá nhân hóa ----------
+
+model WeaknessAnalysis {
+  id        String      @id @default(cuid())
+  studentId String
+  subjectId String
+  attemptId String?
+  attempt   ExamAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  // Danh sách chuyên đề yếu kèm chi tiết (tỷ lệ đúng, dạng câu hay sai, ...)
+  weakTopics Json
+  details    Json?
+
+  generatedAt DateTime @default(now())
+
+  @@index([studentId, subjectId])
+}
+
+model StudyRoadmap {
+  id        String        @id @default(cuid())
+  studentId String
+  subjectId String
+  status    RoadmapStatus @default(ACTIVE)
+
+  // Các giai đoạn ôn tập: [{ topicId, stage, resourceType, status }, ...]
+  stages Json
+
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([studentId, subjectId])
+}
+
+// ---------- Audit ----------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+}
