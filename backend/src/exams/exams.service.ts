@@ -135,13 +135,30 @@ export class ExamsService {
     const exam = await this.findExamOrThrow(examId);
     await this.assertStudentCanAccess(exam, user.sub);
 
-    const inProgress = await this.prisma.examAttempt.findFirst({
-      where: { examId, studentId: user.sub, status: AttemptStatus.IN_PROGRESS },
-    });
-    if (inProgress) {
-      return inProgress;
+    // Đọc rồi mới tạo có thể bị race nếu 2 request đến gần như đồng thời (double-click,
+    // React StrictMode...). Dùng transaction isolation Serializable để Postgres tự phát
+    // hiện xung đột; nếu bị serialization failure thì coi như đã có attempt, đọc lại.
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const inProgress = await tx.examAttempt.findFirst({
+            where: { examId, studentId: user.sub, status: AttemptStatus.IN_PROGRESS },
+          });
+          if (inProgress) {
+            return inProgress;
+          }
+          return tx.examAttempt.create({ data: { examId, studentId: user.sub } });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch {
+      const existing = await this.prisma.examAttempt.findFirst({
+        where: { examId, studentId: user.sub, status: AttemptStatus.IN_PROGRESS },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (existing) return existing;
+      throw new BadRequestException('Không thể bắt đầu lượt làm bài, vui lòng thử lại');
     }
-    return this.prisma.examAttempt.create({ data: { examId, studentId: user.sub } });
   }
 
   private async findAttemptOrThrow(id: string) {

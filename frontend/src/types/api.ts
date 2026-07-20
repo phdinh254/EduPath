@@ -1,0 +1,218 @@
+export type Role = 'STUDENT' | 'TEACHER' | 'ADMIN';
+
+export type QuestionType = 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'ESSAY';
+export type DifficultyLevel = 'KNOWLEDGE' | 'COMPREHENSION' | 'APPLICATION' | 'HIGH_APPLICATION';
+export type ContentStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED' | 'GRADED';
+export type StudentClassStatus = 'ACTIVE' | 'REMOVED';
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  role: Role;
+  isActive: boolean;
+  createdAt: string;
+  ownedTenant: { id: string; name: string } | null;
+}
+
+export interface Subject {
+  id: string;
+  code: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface Topic {
+  id: string;
+  subjectId: string;
+  name: string;
+  parentTopicId: string | null;
+  createdAt: string;
+}
+
+export interface SchoolClass {
+  id: string;
+  tenantId: string;
+  name: string;
+  inviteCode: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StudentClassLink {
+  id: string;
+  studentId: string;
+  classId: string;
+  status: StudentClassStatus;
+  joinedAt: string;
+  removedAt: string | null;
+  class?: SchoolClass;
+  student?: { id: string; fullName: string; email: string };
+}
+
+export interface Question {
+  id: string;
+  subjectId: string;
+  topicId: string;
+  type: QuestionType;
+  difficulty: DifficultyLevel;
+  content: string;
+  options: unknown;
+  correctAnswer: unknown;
+  explanation: string | null;
+  tenantId: string | null;
+  createdById: string;
+  isGlobal: boolean;
+  status: ContentStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Exam {
+  id: string;
+  title: string;
+  subjectId: string;
+  tenantId: string | null;
+  classId: string | null;
+  createdById: string;
+  durationMinutes: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExamQuestion {
+  id: string;
+  examId: string;
+  questionId: string;
+  order: number;
+  maxScore: number;
+  question: Partial<Question> & { id: string; type: QuestionType; content: string };
+}
+
+export interface Answer {
+  id: string;
+  attemptId: string;
+  questionId: string;
+  response: unknown;
+  isCorrect: boolean | null;
+  scoreAwarded: number | null;
+  aiPreliminaryScore: number | null;
+  aiComment: string | null;
+  isAiReferenceOnly: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Score {
+  id: string;
+  attemptId: string;
+  totalScore: number;
+  topicBreakdown: Record<string, { correct: number; total: number }>;
+  gradedAt: string;
+}
+
+export interface ExamAttempt {
+  id: string;
+  examId: string;
+  studentId: string;
+  status: AttemptStatus;
+  startedAt: string;
+  submittedAt: string | null;
+  totalScore: number | null;
+  createdAt: string;
+  updatedAt: string;
+  answers?: Answer[];
+  exam?: Exam;
+  score?: Score | null;
+  student?: { id: string; fullName: string; email: string };
+}
+
+export interface AttemptReviewItem {
+  questionId: string;
+  content: string;
+  type: QuestionType;
+  options: unknown;
+  correctAnswer: unknown;
+  explanation: string | null;
+  maxScore: number;
+  response: unknown;
+  isCorrect: boolean | null;
+  scoreAwarded: number | null;
+  aiPreliminaryScore: number | null;
+  aiComment: string | null;
+  isAiReferenceOnly: boolean;
+}
+
+export interface WeaknessAnalysis {
+  id: string;
+  studentId: string;
+  subjectId: string;
+  attemptId: string | null;
+  weakTopics: { topicId: string; correct: number; total: number }[];
+  details: unknown;
+  generatedAt: string;
+}
+
+export interface StudyRoadmapStage {
+  topicId: string;
+  stage: 'REVIEW_THEORY' | 'BASIC_PRACTICE' | 'ADVANCED_PRACTICE' | 'RETEST';
+  status: string;
+}
+
+export interface StudyRoadmap {
+  id: string;
+  studentId: string;
+  subjectId: string;
+  status: 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+  stages: StudyRoadmapStage[];
+  generatedAt: string;
+  updatedAt: string;
+}
+
+export interface PendingReviewAnswer extends Answer {
+  question: { id: string; content: string };
+  attempt: ExamAttempt & { student: { id: string; fullName: string; email: string }; exam: { id: string; title: string } };
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  owner: { id: string; fullName: string; email: string };
+  _count: { classes: number; questions: number; exams: number };
+}
+
+export interface AdminStats {
+  totalStudents: number;
+  totalTeachers: number;
+  totalTenants: number;
+  totalSubjects: number;
+  totalExams: number;
+  totalAttempts: number;
+  questionsByStatus: { draft: number; pendingApproval: number; approved: number; rejected: number };
+}
+
+export interface AuditLog {
+  id: string;
+  userId: string | null;
+  user: { id: string; fullName: string; email: string } | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  metadata: unknown;
+  createdAt: string;
+}
+
+export interface ApiErrorBody {
+  message: string | string[];
+  error?: string;
+  statusCode: number;
+}

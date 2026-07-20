@@ -1,0 +1,30 @@
+import { apiClient } from '../../lib/api-client';
+import type { AuthTokens, Role, UserProfile } from '../../types/api';
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  fullName: string;
+  role: Role;
+  tenantName?: string;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+export async function registerRequest(payload: RegisterPayload): Promise<AuthTokens> {
+  const { data } = await apiClient.post<AuthTokens>('/auth/register', payload);
+  return data;
+}
+
+export async function loginRequest(payload: LoginPayload): Promise<AuthTokens> {
+  const { data } = await apiClient.post<AuthTokens>('/auth/login', payload);
+  return data;
+}
+
+export async function fetchMe(): Promise<UserProfile> {
+  const { data } = await apiClient.get<UserProfile>('/users/me');
+  return data;
+}

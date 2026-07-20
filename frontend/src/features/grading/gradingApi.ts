@@ -1,0 +1,20 @@
+import { apiClient } from '../../lib/api-client';
+import type { ExamAttempt, PendingReviewAnswer } from '../../types/api';
+
+export async function submitAttempt(attemptId: string): Promise<ExamAttempt> {
+  const { data } = await apiClient.post<ExamAttempt>(`/grading/attempts/${attemptId}/submit`);
+  return data;
+}
+
+export async function fetchPendingReview(): Promise<PendingReviewAnswer[]> {
+  const { data } = await apiClient.get<PendingReviewAnswer[]>('/grading/pending-review');
+  return data;
+}
+
+export async function reviewEssayAnswer(
+  answerId: string,
+  payload: { finalScore: number; comment?: string },
+): Promise<ExamAttempt> {
+  const { data } = await apiClient.post<ExamAttempt>(`/grading/answers/${answerId}/review`, payload);
+  return data;
+}
