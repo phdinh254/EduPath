@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -7,6 +7,7 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { ClassesService } from './classes.service';
 import { CreateClassDto } from './dto/create-class.dto';
 import { JoinClassDto } from './dto/join-class.dto';
+import { UpdateClassDto } from './dto/update-class.dto';
 
 @ApiTags('classes')
 @Controller('classes')
@@ -31,6 +32,20 @@ export class ClassesController {
   findStudents(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     this.assertTenant(user);
     return this.classesService.findStudents(id, user.tenantId!);
+  }
+
+  @Roles(Role.TEACHER)
+  @Patch(':id')
+  update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateClassDto) {
+    this.assertTenant(user);
+    return this.classesService.update(id, user.tenantId!, dto);
+  }
+
+  @Roles(Role.TEACHER)
+  @Delete(':id')
+  remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    this.assertTenant(user);
+    return this.classesService.remove(id, user.tenantId!);
   }
 
   @Roles(Role.TEACHER)

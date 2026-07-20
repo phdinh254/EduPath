@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -16,6 +16,12 @@ export class GradingController {
   @Post('attempts/:attemptId/submit')
   submit(@CurrentUser() user: JwtPayload, @Param('attemptId') attemptId: string) {
     return this.gradingService.submitAttempt(attemptId, user);
+  }
+
+  @Roles(Role.TEACHER, Role.ADMIN)
+  @Get('pending-review')
+  findPendingReview(@CurrentUser() user: JwtPayload) {
+    return this.gradingService.findPendingReview(user);
   }
 
   @Roles(Role.TEACHER, Role.ADMIN)

@@ -3,6 +3,7 @@ import { ConflictException, ForbiddenException, Injectable, NotFoundException } 
 import { StudentClassStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClassDto } from './dto/create-class.dto';
+import { UpdateClassDto } from './dto/update-class.dto';
 
 function generateInviteCode(): string {
   return randomBytes(4).toString('hex').toUpperCase();
@@ -84,5 +85,20 @@ export class ClassesService {
       where: { studentId, status: StudentClassStatus.ACTIVE },
       include: { class: true },
     });
+  }
+
+  async findOne(classId: string, tenantId: string) {
+    return this.assertTeacherOwnsClass(classId, tenantId);
+  }
+
+  async update(classId: string, tenantId: string, dto: UpdateClassDto) {
+    await this.assertTeacherOwnsClass(classId, tenantId);
+    return this.prisma.class.update({ where: { id: classId }, data: { name: dto.name } });
+  }
+
+  async remove(classId: string, tenantId: string) {
+    await this.assertTeacherOwnsClass(classId, tenantId);
+    await this.prisma.class.delete({ where: { id: classId } });
+    return { id: classId, deleted: true };
   }
 }

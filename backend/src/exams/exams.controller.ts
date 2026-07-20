@@ -41,6 +41,12 @@ export class ExamsController {
     return this.examsService.listQuestions(id, user);
   }
 
+  @Roles(Role.TEACHER, Role.ADMIN)
+  @Get(':id/attempts')
+  listAttempts(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.examsService.listAttemptsForExam(id, user);
+  }
+
   @Roles(Role.STUDENT)
   @Post(':id/attempts')
   startAttempt(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
@@ -50,6 +56,11 @@ export class ExamsController {
   @Get('attempts/:attemptId')
   getAttempt(@CurrentUser() user: JwtPayload, @Param('attemptId') attemptId: string) {
     return this.examsService.getAttempt(attemptId, user);
+  }
+
+  @Get('attempts/:attemptId/review')
+  getAttemptReview(@CurrentUser() user: JwtPayload, @Param('attemptId') attemptId: string) {
+    return this.examsService.getAttemptReview(attemptId, user);
   }
 
   @Roles(Role.STUDENT)

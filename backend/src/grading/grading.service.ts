@@ -91,6 +91,31 @@ export class GradingService {
     return this.recomputeScore(attemptId);
   }
 
+  // Danh sách bài tự luận đã nộp, chờ giáo viên duyệt điểm AI chấm sơ bộ.
+  findPendingReview(user: JwtPayload) {
+    return this.prisma.answer.findMany({
+      where: {
+        question: { type: QuestionType.ESSAY },
+        isAiReferenceOnly: false,
+        scoreAwarded: null,
+        attempt: {
+          status: AttemptStatus.SUBMITTED,
+          exam: user.role === Role.ADMIN ? undefined : { tenantId: user.tenantId },
+        },
+      },
+      include: {
+        question: { select: { id: true, content: true } },
+        attempt: {
+          include: {
+            student: { select: { id: true, fullName: true, email: true } },
+            exam: { select: { id: true, title: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async reviewEssay(answerId: string, user: JwtPayload, finalScore: number, comment?: string) {
     const answer = await this.prisma.answer.findUnique({
       where: { id: answerId },

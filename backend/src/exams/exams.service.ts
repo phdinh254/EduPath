@@ -183,4 +183,59 @@ export class ExamsService {
     }
     return attempt;
   }
+
+  // Giáo viên/admin xem toàn bộ lượt làm bài của một đề để theo dõi tiến độ học sinh.
+  async listAttemptsForExam(examId: string, user: JwtPayload) {
+    const exam = await this.findExamOrThrow(examId);
+    this.assertManageable(exam, user);
+    return this.prisma.examAttempt.findMany({
+      where: { examId },
+      include: { student: { select: { id: true, fullName: true, email: true } }, score: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Đáp án đúng, giải thích và câu sai chỉ lộ ra sau khi bài đã được nộp/chấm —
+  // không dùng chung với listQuestions() vốn phục vụ lúc học sinh đang làm bài.
+  async getAttemptReview(attemptId: string, user: JwtPayload) {
+    const attempt = await this.prisma.examAttempt.findUnique({
+      where: { id: attemptId },
+      include: {
+        exam: { include: { examQuestions: { include: { question: true }, orderBy: { order: 'asc' } } } },
+        answers: true,
+      },
+    });
+    if (!attempt) {
+      throw new NotFoundException('Không tìm thấy lượt làm bài');
+    }
+    if (user.role === Role.STUDENT && attempt.studentId !== user.sub) {
+      throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
+    }
+    if (user.role === Role.TEACHER && attempt.exam.tenantId !== user.tenantId) {
+      throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
+    }
+    if (attempt.status === AttemptStatus.IN_PROGRESS) {
+      throw new BadRequestException('Bài làm chưa được nộp, chưa thể xem đáp án');
+    }
+
+    const answersByQuestionId = new Map(attempt.answers.map((a) => [a.questionId, a]));
+    return attempt.exam.examQuestions.map((eq) => {
+      const answer = answersByQuestionId.get(eq.questionId);
+      return {
+        questionId: eq.questionId,
+        content: eq.question.content,
+        type: eq.question.type,
+        options: eq.question.options,
+        correctAnswer: eq.question.correctAnswer,
+        explanation: eq.question.explanation,
+        maxScore: eq.maxScore,
+        response: answer?.response ?? null,
+        isCorrect: answer?.isCorrect ?? null,
+        scoreAwarded: answer?.scoreAwarded ?? null,
+        aiPreliminaryScore: answer?.aiPreliminaryScore ?? null,
+        aiComment: answer?.aiComment ?? null,
+        isAiReferenceOnly: answer?.isAiReferenceOnly ?? false,
+      };
+    });
+  }
 }
