@@ -1,0 +1,186 @@
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { AttemptStatus, ContentStatus, Prisma, Role } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { CreateExamDto } from './dto/create-exam.dto';
+import { AddExamQuestionDto } from './dto/add-exam-question.dto';
+
+@Injectable()
+export class ExamsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  create(user: JwtPayload, dto: CreateExamDto) {
+    const isAdmin = user.role === Role.ADMIN;
+    if (!isAdmin && !user.tenantId) {
+      throw new ForbiddenException('Giáo viên chưa có tenant');
+    }
+    return this.prisma.exam.create({
+      data: {
+        title: dto.title,
+        subjectId: dto.subjectId,
+        durationMinutes: dto.durationMinutes,
+        classId: dto.classId,
+        tenantId: isAdmin ? null : user.tenantId,
+        createdById: user.sub,
+      },
+    });
+  }
+
+  private async findExamOrThrow(id: string) {
+    const exam = await this.prisma.exam.findUnique({ where: { id } });
+    if (!exam) {
+      throw new NotFoundException('Không tìm thấy đề thi');
+    }
+    return exam;
+  }
+
+  private assertManageable(exam: { tenantId: string | null }, user: JwtPayload) {
+    if (user.role === Role.ADMIN) return;
+    if (exam.tenantId !== user.tenantId) {
+      throw new ForbiddenException('Bạn không có quyền quản lý đề thi này');
+    }
+  }
+
+  async findAllForUser(user: JwtPayload) {
+    if (user.role === Role.ADMIN) {
+      return this.prisma.exam.findMany({ orderBy: { createdAt: 'desc' } });
+    }
+    if (user.role === Role.TEACHER) {
+      return this.prisma.exam.findMany({ where: { tenantId: user.tenantId }, orderBy: { createdAt: 'desc' } });
+    }
+    // Học sinh: đề chính thức/dùng chung + đề của các lớp mình đang tham gia
+    const classIds = (
+      await this.prisma.studentClass.findMany({
+        where: { studentId: user.sub, status: 'ACTIVE' },
+        select: { classId: true },
+      })
+    ).map((sc) => sc.classId);
+    return this.prisma.exam.findMany({
+      where: { OR: [{ tenantId: null }, { classId: { in: classIds } }] },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findOne(id: string, user: JwtPayload) {
+    const exam = await this.findExamOrThrow(id);
+    if (user.role !== Role.STUDENT) {
+      this.assertManageable(exam, user);
+    } else {
+      await this.assertStudentCanAccess(exam, user.sub);
+    }
+    return exam;
+  }
+
+  private async assertStudentCanAccess(
+    exam: { id: string; tenantId: string | null; classId: string | null },
+    studentId: string,
+  ) {
+    if (exam.tenantId === null) return; // đề chính thức/dùng chung
+    if (!exam.classId) {
+      throw new ForbiddenException('Đề thi chưa được gán cho lớp học');
+    }
+    const membership = await this.prisma.studentClass.findUnique({
+      where: { studentId_classId: { studentId, classId: exam.classId } },
+    });
+    if (!membership || membership.status !== 'ACTIVE') {
+      throw new ForbiddenException('Bạn không thuộc lớp học được giao đề thi này');
+    }
+  }
+
+  async addQuestion(examId: string, user: JwtPayload, dto: AddExamQuestionDto) {
+    const exam = await this.findExamOrThrow(examId);
+    this.assertManageable(exam, user);
+
+    const question = await this.prisma.question.findUnique({ where: { id: dto.questionId } });
+    if (!question) {
+      throw new NotFoundException('Không tìm thấy câu hỏi');
+    }
+    const questionAccessible =
+      user.role === Role.ADMIN ||
+      question.tenantId === user.tenantId ||
+      (question.isGlobal && question.status === ContentStatus.APPROVED);
+    if (!questionAccessible) {
+      throw new ForbiddenException('Bạn không có quyền sử dụng câu hỏi này');
+    }
+
+    return this.prisma.examQuestion.create({
+      data: { examId, questionId: dto.questionId, order: dto.order, maxScore: dto.maxScore },
+    });
+  }
+
+  async listQuestions(examId: string, user: JwtPayload) {
+    const exam = await this.findOne(examId, user);
+    const examQuestions = await this.prisma.examQuestion.findMany({
+      where: { examId: exam.id },
+      include: { question: true },
+      orderBy: { order: 'asc' },
+    });
+    if (user.role === Role.STUDENT) {
+      // Không lộ đáp án đúng cho học sinh khi đang làm bài
+      return examQuestions.map(({ question, ...rest }) => ({
+        ...rest,
+        question: {
+          id: question.id,
+          type: question.type,
+          difficulty: question.difficulty,
+          content: question.content,
+          options: question.options,
+        },
+      }));
+    }
+    return examQuestions;
+  }
+
+  async startAttempt(examId: string, user: JwtPayload) {
+    const exam = await this.findExamOrThrow(examId);
+    await this.assertStudentCanAccess(exam, user.sub);
+
+    const inProgress = await this.prisma.examAttempt.findFirst({
+      where: { examId, studentId: user.sub, status: AttemptStatus.IN_PROGRESS },
+    });
+    if (inProgress) {
+      return inProgress;
+    }
+    return this.prisma.examAttempt.create({ data: { examId, studentId: user.sub } });
+  }
+
+  private async findAttemptOrThrow(id: string) {
+    const attempt = await this.prisma.examAttempt.findUnique({ where: { id } });
+    if (!attempt) {
+      throw new NotFoundException('Không tìm thấy lượt làm bài');
+    }
+    return attempt;
+  }
+
+  async saveAnswer(attemptId: string, user: JwtPayload, questionId: string, response: unknown) {
+    const attempt = await this.findAttemptOrThrow(attemptId);
+    if (attempt.studentId !== user.sub) {
+      throw new ForbiddenException('Đây không phải lượt làm bài của bạn');
+    }
+    if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+      throw new BadRequestException('Lượt làm bài đã kết thúc');
+    }
+    return this.prisma.answer.upsert({
+      where: { attemptId_questionId: { attemptId, questionId } },
+      create: { attemptId, questionId, response: response as Prisma.InputJsonValue },
+      update: { response: response as Prisma.InputJsonValue },
+    });
+  }
+
+  async getAttempt(id: string, user: JwtPayload) {
+    const attempt = await this.prisma.examAttempt.findUnique({
+      where: { id },
+      include: { answers: true, exam: true },
+    });
+    if (!attempt) {
+      throw new NotFoundException('Không tìm thấy lượt làm bài');
+    }
+    if (user.role === Role.STUDENT && attempt.studentId !== user.sub) {
+      throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
+    }
+    if (user.role === Role.TEACHER && attempt.exam.tenantId !== user.tenantId) {
+      throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
+    }
+    return attempt;
+  }
+}
