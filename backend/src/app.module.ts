@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { ClassesModule } from './classes/classes.module';
+import { QuestionsModule } from './questions/questions.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 
@@ -19,6 +20,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
     UsersModule,
     SubjectsModule,
     ClassesModule,
+    QuestionsModule,
   ],
   controllers: [AppController],
   providers: [
