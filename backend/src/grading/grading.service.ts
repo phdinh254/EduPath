@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AttemptStatus, QuestionType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { RoadmapService } from '../roadmap/roadmap.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import {
   gradeEssayPlaceholder,
@@ -11,7 +12,10 @@ import {
 
 @Injectable()
 export class GradingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly roadmapService: RoadmapService,
+  ) {}
 
   async submitAttempt(attemptId: string, user: JwtPayload) {
     const attempt = await this.prisma.examAttempt.findUnique({
@@ -144,10 +148,16 @@ export class GradingService {
     const stillPendingReview = answers.some(
       (a) => a.question.type === QuestionType.ESSAY && !a.isAiReferenceOnly && a.scoreAwarded === null,
     );
+    const finalStatus = stillPendingReview ? AttemptStatus.SUBMITTED : AttemptStatus.GRADED;
     await this.prisma.examAttempt.update({
       where: { id: attemptId },
-      data: { totalScore, status: stillPendingReview ? AttemptStatus.SUBMITTED : AttemptStatus.GRADED },
+      data: { totalScore, status: finalStatus },
     });
+
+    // Chỉ phân tích điểm yếu và cập nhật lộ trình khi bài đã được chấm xong hoàn toàn.
+    if (finalStatus === AttemptStatus.GRADED) {
+      await this.roadmapService.generateForAttempt(attemptId);
+    }
 
     return this.prisma.examAttempt.findUnique({
       where: { id: attemptId },
