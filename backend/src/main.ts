@@ -9,7 +9,9 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Lộ Trình 12 AI API')
-    .setDescription('RESTful API cho hệ thống luyện thi thử THPT có lộ trình cá nhân hóa bằng AI')
+    .setDescription(
+      'RESTful API cho hệ thống luyện thi thử THPT có lộ trình cá nhân hóa bằng AI',
+    )
     .setVersion('0.1')
     .addBearerAuth()
     .build();
@@ -18,4 +20,4 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
-bootstrap();
+void bootstrap();

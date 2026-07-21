@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ContentStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -36,7 +41,10 @@ export class QuestionsService {
     // Giáo viên: câu hỏi thuộc tenant của mình + câu hỏi đã vào kho dùng chung
     return this.prisma.question.findMany({
       where: {
-        OR: [{ tenantId: user.tenantId }, { isGlobal: true, status: ContentStatus.APPROVED }],
+        OR: [
+          { tenantId: user.tenantId },
+          { isGlobal: true, status: ContentStatus.APPROVED },
+        ],
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -71,7 +79,9 @@ export class QuestionsService {
   async proposeForGlobal(id: string, user: JwtPayload) {
     const question = await this.assertTeacherOwnsDraft(id, user);
     if (question.status !== ContentStatus.DRAFT) {
-      throw new BadRequestException('Chỉ có thể đề xuất câu hỏi đang ở trạng thái nháp');
+      throw new BadRequestException(
+        'Chỉ có thể đề xuất câu hỏi đang ở trạng thái nháp',
+      );
     }
     return this.prisma.question.update({
       where: { id },

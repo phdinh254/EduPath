@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { Role } from '@prisma/client';
@@ -23,9 +28,11 @@ export class AuthService {
       throw new ConflictException('Email đã được sử dụng');
     }
     if (dto.role === Role.TEACHER && !dto.tenantName) {
-      throw new BadRequestException('Giáo viên/trung tâm cần cung cấp tenantName khi đăng ký');
+      throw new BadRequestException(
+        'Giáo viên/trung tâm cần cung cấp tenantName khi đăng ký',
+      );
     }
-    const passwordHash = await argon2.hash(dto.password);
+    const passwordHash = (await argon2.hash(dto.password)) as string;
     const user = await this.usersService.create({
       email: dto.email,
       passwordHash,
@@ -49,10 +56,20 @@ export class AuthService {
     if (!user || !(await argon2.verify(user.passwordHash, dto.password))) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
-    return this.buildTokens(user.id, user.email, user.role, user.ownedTenant?.id);
+    return this.buildTokens(
+      user.id,
+      user.email,
+      user.role,
+      user.ownedTenant?.id,
+    );
   }
 
-  private async buildTokens(sub: string, email: string, role: string, tenantId?: string) {
+  private async buildTokens(
+    sub: string,
+    email: string,
+    role: string,
+    tenantId?: string,
+  ) {
     const payload = { sub, email, role, tenantId };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {

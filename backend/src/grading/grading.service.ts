@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AttemptStatus, QuestionType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoadmapService } from '../roadmap/roadmap.service';
@@ -39,7 +44,9 @@ export class GradingService {
     // (đề không gắn với lớp học nào); nếu thuộc lớp giáo viên, chờ giáo viên duyệt.
     const isSelfStudyExam = attempt.exam.classId === null;
 
-    const answersByQuestionId = new Map(attempt.answers.map((a) => [a.questionId, a]));
+    const answersByQuestionId = new Map(
+      attempt.answers.map((a) => [a.questionId, a]),
+    );
 
     for (const eq of attempt.exam.examQuestions) {
       const existingAnswer = answersByQuestionId.get(eq.questionId);
@@ -48,7 +55,9 @@ export class GradingService {
       if (eq.question.type === QuestionType.ESSAY) {
         const { score, comment } = gradeEssayPlaceholder(response, eq.maxScore);
         await this.prisma.answer.upsert({
-          where: { attemptId_questionId: { attemptId, questionId: eq.questionId } },
+          where: {
+            attemptId_questionId: { attemptId, questionId: eq.questionId },
+          },
           create: {
             attemptId,
             questionId: eq.questionId,
@@ -74,11 +83,23 @@ export class GradingService {
           : eq.question.type === QuestionType.TRUE_FALSE
             ? gradeTrueFalse
             : gradeShortAnswer;
-      const { isCorrect, scoreAwarded } = grader(response, eq.question.correctAnswer, eq.maxScore);
+      const { isCorrect, scoreAwarded } = grader(
+        response,
+        eq.question.correctAnswer,
+        eq.maxScore,
+      );
 
       await this.prisma.answer.upsert({
-        where: { attemptId_questionId: { attemptId, questionId: eq.questionId } },
-        create: { attemptId, questionId: eq.questionId, response: response ?? undefined, isCorrect, scoreAwarded },
+        where: {
+          attemptId_questionId: { attemptId, questionId: eq.questionId },
+        },
+        create: {
+          attemptId,
+          questionId: eq.questionId,
+          response: response ?? undefined,
+          isCorrect,
+          scoreAwarded,
+        },
         update: { isCorrect, scoreAwarded },
       });
     }
@@ -100,7 +121,8 @@ export class GradingService {
         scoreAwarded: null,
         attempt: {
           status: AttemptStatus.SUBMITTED,
-          exam: user.role === Role.ADMIN ? undefined : { tenantId: user.tenantId },
+          exam:
+            user.role === Role.ADMIN ? undefined : { tenantId: user.tenantId },
         },
       },
       include: {
@@ -116,7 +138,12 @@ export class GradingService {
     });
   }
 
-  async reviewEssay(answerId: string, user: JwtPayload, finalScore: number, comment?: string) {
+  async reviewEssay(
+    answerId: string,
+    user: JwtPayload,
+    finalScore: number,
+    comment?: string,
+  ) {
     const answer = await this.prisma.answer.findUnique({
       where: { id: answerId },
       include: { question: true, attempt: { include: { exam: true } } },
@@ -127,7 +154,10 @@ export class GradingService {
     if (answer.question.type !== QuestionType.ESSAY) {
       throw new BadRequestException('Chỉ áp dụng duyệt điểm cho câu tự luận');
     }
-    if (user.role !== Role.ADMIN && answer.attempt.exam.tenantId !== user.tenantId) {
+    if (
+      user.role !== Role.ADMIN &&
+      answer.attempt.exam.tenantId !== user.tenantId
+    ) {
       throw new ForbiddenException('Bạn không có quyền duyệt bài này');
     }
 
@@ -142,7 +172,10 @@ export class GradingService {
       },
       update: { finalScore, comment, teacherId: user.sub },
     });
-    await this.prisma.answer.update({ where: { id: answerId }, data: { scoreAwarded: finalScore } });
+    await this.prisma.answer.update({
+      where: { id: answerId },
+      data: { scoreAwarded: finalScore },
+    });
 
     return this.recomputeScore(answer.attemptId);
   }
@@ -153,12 +186,19 @@ export class GradingService {
       include: { question: true },
     });
 
-    const totalScore = answers.reduce((sum, a) => sum + (a.scoreAwarded ?? 0), 0);
+    const totalScore = answers.reduce(
+      (sum, a) => sum + (a.scoreAwarded ?? 0),
+      0,
+    );
 
-    const topicBreakdown: Record<string, { correct: number; total: number }> = {};
+    const topicBreakdown: Record<string, { correct: number; total: number }> =
+      {};
     for (const a of answers) {
       if (a.question.type === QuestionType.ESSAY) continue; // không tính vào tỷ lệ đúng/sai nhị phân
-      const entry = topicBreakdown[a.question.topicId] ?? { correct: 0, total: 0 };
+      const entry = topicBreakdown[a.question.topicId] ?? {
+        correct: 0,
+        total: 0,
+      };
       entry.total += 1;
       if (a.isCorrect) entry.correct += 1;
       topicBreakdown[a.question.topicId] = entry;
@@ -171,9 +211,14 @@ export class GradingService {
     });
 
     const stillPendingReview = answers.some(
-      (a) => a.question.type === QuestionType.ESSAY && !a.isAiReferenceOnly && a.scoreAwarded === null,
+      (a) =>
+        a.question.type === QuestionType.ESSAY &&
+        !a.isAiReferenceOnly &&
+        a.scoreAwarded === null,
     );
-    const finalStatus = stillPendingReview ? AttemptStatus.SUBMITTED : AttemptStatus.GRADED;
+    const finalStatus = stillPendingReview
+      ? AttemptStatus.SUBMITTED
+      : AttemptStatus.GRADED;
     await this.prisma.examAttempt.update({
       where: { id: attemptId },
       data: { totalScore, status: finalStatus },

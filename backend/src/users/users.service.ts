@@ -7,14 +7,22 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email }, include: { ownedTenant: true } });
+    return this.prisma.user.findUnique({
+      where: { email },
+      include: { ownedTenant: true },
+    });
   }
 
   findById(id: string) {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
-  create(data: { email: string; passwordHash: string; fullName: string; role: Role }) {
+  create(data: {
+    email: string;
+    passwordHash: string;
+    fullName: string;
+    role: Role;
+  }) {
     return this.prisma.user.create({ data });
   }
 

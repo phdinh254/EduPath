@@ -24,7 +24,10 @@ export class SubjectsService {
   }
 
   findTopics(subjectId: string) {
-    return this.prisma.topic.findMany({ where: { subjectId }, orderBy: { name: 'asc' } });
+    return this.prisma.topic.findMany({
+      where: { subjectId },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async createTopic(subjectId: string, dto: CreateTopicDto) {

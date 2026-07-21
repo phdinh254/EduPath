@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AttemptStatus, ContentStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -34,7 +39,10 @@ export class ExamsService {
     return exam;
   }
 
-  private assertManageable(exam: { tenantId: string | null }, user: JwtPayload) {
+  private assertManageable(
+    exam: { tenantId: string | null },
+    user: JwtPayload,
+  ) {
     if (user.role === Role.ADMIN) return;
     if (exam.tenantId !== user.tenantId) {
       throw new ForbiddenException('Bạn không có quyền quản lý đề thi này');
@@ -46,7 +54,10 @@ export class ExamsService {
       return this.prisma.exam.findMany({ orderBy: { createdAt: 'desc' } });
     }
     if (user.role === Role.TEACHER) {
-      return this.prisma.exam.findMany({ where: { tenantId: user.tenantId }, orderBy: { createdAt: 'desc' } });
+      return this.prisma.exam.findMany({
+        where: { tenantId: user.tenantId },
+        orderBy: { createdAt: 'desc' },
+      });
     }
     // Học sinh: đề chính thức/dùng chung + đề của các lớp mình đang tham gia
     const classIds = (
@@ -83,7 +94,9 @@ export class ExamsService {
       where: { studentId_classId: { studentId, classId: exam.classId } },
     });
     if (!membership || membership.status !== 'ACTIVE') {
-      throw new ForbiddenException('Bạn không thuộc lớp học được giao đề thi này');
+      throw new ForbiddenException(
+        'Bạn không thuộc lớp học được giao đề thi này',
+      );
     }
   }
 
@@ -91,7 +104,9 @@ export class ExamsService {
     const exam = await this.findExamOrThrow(examId);
     this.assertManageable(exam, user);
 
-    const question = await this.prisma.question.findUnique({ where: { id: dto.questionId } });
+    const question = await this.prisma.question.findUnique({
+      where: { id: dto.questionId },
+    });
     if (!question) {
       throw new NotFoundException('Không tìm thấy câu hỏi');
     }
@@ -104,7 +119,12 @@ export class ExamsService {
     }
 
     return this.prisma.examQuestion.create({
-      data: { examId, questionId: dto.questionId, order: dto.order, maxScore: dto.maxScore },
+      data: {
+        examId,
+        questionId: dto.questionId,
+        order: dto.order,
+        maxScore: dto.maxScore,
+      },
     });
   }
 
@@ -142,22 +162,34 @@ export class ExamsService {
       return await this.prisma.$transaction(
         async (tx) => {
           const inProgress = await tx.examAttempt.findFirst({
-            where: { examId, studentId: user.sub, status: AttemptStatus.IN_PROGRESS },
+            where: {
+              examId,
+              studentId: user.sub,
+              status: AttemptStatus.IN_PROGRESS,
+            },
           });
           if (inProgress) {
             return inProgress;
           }
-          return tx.examAttempt.create({ data: { examId, studentId: user.sub } });
+          return tx.examAttempt.create({
+            data: { examId, studentId: user.sub },
+          });
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch {
       const existing = await this.prisma.examAttempt.findFirst({
-        where: { examId, studentId: user.sub, status: AttemptStatus.IN_PROGRESS },
+        where: {
+          examId,
+          studentId: user.sub,
+          status: AttemptStatus.IN_PROGRESS,
+        },
         orderBy: { createdAt: 'asc' },
       });
       if (existing) return existing;
-      throw new BadRequestException('Không thể bắt đầu lượt làm bài, vui lòng thử lại');
+      throw new BadRequestException(
+        'Không thể bắt đầu lượt làm bài, vui lòng thử lại',
+      );
     }
   }
 
@@ -169,7 +201,12 @@ export class ExamsService {
     return attempt;
   }
 
-  async saveAnswer(attemptId: string, user: JwtPayload, questionId: string, response: unknown) {
+  async saveAnswer(
+    attemptId: string,
+    user: JwtPayload,
+    questionId: string,
+    response: unknown,
+  ) {
     const attempt = await this.findAttemptOrThrow(attemptId);
     if (attempt.studentId !== user.sub) {
       throw new ForbiddenException('Đây không phải lượt làm bài của bạn');
@@ -179,7 +216,11 @@ export class ExamsService {
     }
     return this.prisma.answer.upsert({
       where: { attemptId_questionId: { attemptId, questionId } },
-      create: { attemptId, questionId, response: response as Prisma.InputJsonValue },
+      create: {
+        attemptId,
+        questionId,
+        response: response as Prisma.InputJsonValue,
+      },
       update: { response: response as Prisma.InputJsonValue },
     });
   }
@@ -207,7 +248,10 @@ export class ExamsService {
     this.assertManageable(exam, user);
     return this.prisma.examAttempt.findMany({
       where: { examId },
-      include: { student: { select: { id: true, fullName: true, email: true } }, score: true },
+      include: {
+        student: { select: { id: true, fullName: true, email: true } },
+        score: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -218,7 +262,14 @@ export class ExamsService {
     const attempt = await this.prisma.examAttempt.findUnique({
       where: { id: attemptId },
       include: {
-        exam: { include: { examQuestions: { include: { question: true }, orderBy: { order: 'asc' } } } },
+        exam: {
+          include: {
+            examQuestions: {
+              include: { question: true },
+              orderBy: { order: 'asc' },
+            },
+          },
+        },
         answers: true,
       },
     });
@@ -232,10 +283,14 @@ export class ExamsService {
       throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
     }
     if (attempt.status === AttemptStatus.IN_PROGRESS) {
-      throw new BadRequestException('Bài làm chưa được nộp, chưa thể xem đáp án');
+      throw new BadRequestException(
+        'Bài làm chưa được nộp, chưa thể xem đáp án',
+      );
     }
 
-    const answersByQuestionId = new Map(attempt.answers.map((a) => [a.questionId, a]));
+    const answersByQuestionId = new Map(
+      attempt.answers.map((a) => [a.questionId, a]),
+    );
     return attempt.exam.examQuestions.map((eq) => {
       const answer = answersByQuestionId.get(eq.questionId);
       return {

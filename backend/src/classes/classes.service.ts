@@ -1,5 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { StudentClassStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClassDto } from './dto/create-class.dto';
@@ -14,21 +19,32 @@ export class ClassesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createForTeacher(teacherId: string, dto: CreateClassDto) {
-    const tenant = await this.prisma.tenant.findUnique({ where: { ownerId: teacherId } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { ownerId: teacherId },
+    });
     if (!tenant) {
       throw new NotFoundException('Giáo viên chưa có tenant');
     }
     return this.prisma.class.create({
-      data: { tenantId: tenant.id, name: dto.name, inviteCode: generateInviteCode() },
+      data: {
+        tenantId: tenant.id,
+        name: dto.name,
+        inviteCode: generateInviteCode(),
+      },
     });
   }
 
   findAllForTenant(tenantId: string) {
-    return this.prisma.class.findMany({ where: { tenantId }, orderBy: { createdAt: 'desc' } });
+    return this.prisma.class.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   private async assertTeacherOwnsClass(classId: string, tenantId: string) {
-    const klass = await this.prisma.class.findUnique({ where: { id: classId } });
+    const klass = await this.prisma.class.findUnique({
+      where: { id: classId },
+    });
     if (!klass) {
       throw new NotFoundException('Không tìm thấy lớp học');
     }
@@ -42,7 +58,9 @@ export class ClassesService {
     await this.assertTeacherOwnsClass(classId, tenantId);
     return this.prisma.studentClass.findMany({
       where: { classId, status: StudentClassStatus.ACTIVE },
-      include: { student: { select: { id: true, fullName: true, email: true } } },
+      include: {
+        student: { select: { id: true, fullName: true, email: true } },
+      },
     });
   }
 
@@ -60,10 +78,16 @@ export class ClassesService {
     if (existing) {
       return this.prisma.studentClass.update({
         where: { id: existing.id },
-        data: { status: StudentClassStatus.ACTIVE, removedAt: null, joinedAt: new Date() },
+        data: {
+          status: StudentClassStatus.ACTIVE,
+          removedAt: null,
+          joinedAt: new Date(),
+        },
       });
     }
-    return this.prisma.studentClass.create({ data: { studentId, classId: klass.id } });
+    return this.prisma.studentClass.create({
+      data: { studentId, classId: klass.id },
+    });
   }
 
   async removeStudent(classId: string, studentId: string, tenantId: string) {
@@ -93,7 +117,10 @@ export class ClassesService {
 
   async update(classId: string, tenantId: string, dto: UpdateClassDto) {
     await this.assertTeacherOwnsClass(classId, tenantId);
-    return this.prisma.class.update({ where: { id: classId }, data: { name: dto.name } });
+    return this.prisma.class.update({
+      where: { id: classId },
+      data: { name: dto.name },
+    });
   }
 
   async remove(classId: string, tenantId: string) {

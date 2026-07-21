@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
+import type { Request } from 'express';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { JwtPayload } from '../strategies/jwt.strategy';
 
@@ -16,7 +17,9 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
-    const user = context.switchToHttp().getRequest().user as JwtPayload | undefined;
+    const { user } = context
+      .switchToHttp()
+      .getRequest<Request & { user?: JwtPayload }>();
     return !!user && requiredRoles.includes(user.role);
   }
 }

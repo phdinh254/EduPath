@@ -22,6 +22,9 @@ export class AdminController {
 
   @Get('audit-logs')
   findAuditLogs(@Query('skip') skip?: string, @Query('take') take?: string) {
-    return this.adminService.findAuditLogs(skip ? Number(skip) : undefined, take ? Number(take) : undefined);
+    return this.adminService.findAuditLogs(
+      skip ? Number(skip) : undefined,
+      take ? Number(take) : undefined,
+    );
   }
 }

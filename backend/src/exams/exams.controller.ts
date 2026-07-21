@@ -32,7 +32,11 @@ export class ExamsController {
 
   @Roles(Role.TEACHER, Role.ADMIN)
   @Post(':id/questions')
-  addQuestion(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: AddExamQuestionDto) {
+  addQuestion(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: AddExamQuestionDto,
+  ) {
     return this.examsService.addQuestion(id, user, dto);
   }
 
@@ -54,12 +58,18 @@ export class ExamsController {
   }
 
   @Get('attempts/:attemptId')
-  getAttempt(@CurrentUser() user: JwtPayload, @Param('attemptId') attemptId: string) {
+  getAttempt(
+    @CurrentUser() user: JwtPayload,
+    @Param('attemptId') attemptId: string,
+  ) {
     return this.examsService.getAttempt(attemptId, user);
   }
 
   @Get('attempts/:attemptId/review')
-  getAttemptReview(@CurrentUser() user: JwtPayload, @Param('attemptId') attemptId: string) {
+  getAttemptReview(
+    @CurrentUser() user: JwtPayload,
+    @Param('attemptId') attemptId: string,
+  ) {
     return this.examsService.getAttemptReview(attemptId, user);
   }
 
@@ -70,6 +80,11 @@ export class ExamsController {
     @Param('attemptId') attemptId: string,
     @Body() dto: SaveAnswerDto,
   ) {
-    return this.examsService.saveAnswer(attemptId, user, dto.questionId, dto.response);
+    return this.examsService.saveAnswer(
+      attemptId,
+      user,
+      dto.questionId,
+      dto.response,
+    );
   }
 }

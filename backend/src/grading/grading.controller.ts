@@ -14,7 +14,10 @@ export class GradingController {
 
   @Roles(Role.STUDENT)
   @Post('attempts/:attemptId/submit')
-  submit(@CurrentUser() user: JwtPayload, @Param('attemptId') attemptId: string) {
+  submit(
+    @CurrentUser() user: JwtPayload,
+    @Param('attemptId') attemptId: string,
+  ) {
     return this.gradingService.submitAttempt(attemptId, user);
   }
 
@@ -26,7 +29,16 @@ export class GradingController {
 
   @Roles(Role.TEACHER, Role.ADMIN)
   @Post('answers/:answerId/review')
-  review(@CurrentUser() user: JwtPayload, @Param('answerId') answerId: string, @Body() dto: ReviewEssayDto) {
-    return this.gradingService.reviewEssay(answerId, user, dto.finalScore, dto.comment);
+  review(
+    @CurrentUser() user: JwtPayload,
+    @Param('answerId') answerId: string,
+    @Body() dto: ReviewEssayDto,
+  ) {
+    return this.gradingService.reviewEssay(
+      answerId,
+      user,
+      dto.finalScore,
+      dto.comment,
+    );
   }
 }

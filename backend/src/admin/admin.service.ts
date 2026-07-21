@@ -26,7 +26,9 @@ export class AdminService {
       this.prisma.exam.count(),
       this.prisma.examAttempt.count(),
       this.prisma.question.count({ where: { status: ContentStatus.DRAFT } }),
-      this.prisma.question.count({ where: { status: ContentStatus.PENDING_APPROVAL } }),
+      this.prisma.question.count({
+        where: { status: ContentStatus.PENDING_APPROVAL },
+      }),
       this.prisma.question.count({ where: { status: ContentStatus.APPROVED } }),
       this.prisma.question.count({ where: { status: ContentStatus.REJECTED } }),
     ]);

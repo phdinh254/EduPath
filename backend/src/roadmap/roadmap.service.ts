@@ -11,7 +11,12 @@ interface TopicBreakdown {
 
 // Các giai đoạn ôn tập theo từng chuyên đề yếu — quy tắc rule-based cho MVP,
 // sẽ được thay bằng lời gọi LLM API thật khi tích hợp AI đề xuất nội dung học.
-const ROADMAP_STAGES = ['REVIEW_THEORY', 'BASIC_PRACTICE', 'ADVANCED_PRACTICE', 'RETEST'] as const;
+const ROADMAP_STAGES = [
+  'REVIEW_THEORY',
+  'BASIC_PRACTICE',
+  'ADVANCED_PRACTICE',
+  'RETEST',
+] as const;
 
 @Injectable()
 export class RoadmapService {
@@ -27,8 +32,15 @@ export class RoadmapService {
 
     const breakdown = attempt.score.topicBreakdown as unknown as TopicBreakdown;
     const weakTopics = Object.entries(breakdown)
-      .filter(([, stats]) => stats.total > 0 && stats.correct / stats.total < WEAK_TOPIC_THRESHOLD)
-      .map(([topicId, stats]) => ({ topicId, correct: stats.correct, total: stats.total }));
+      .filter(
+        ([, stats]) =>
+          stats.total > 0 && stats.correct / stats.total < WEAK_TOPIC_THRESHOLD,
+      )
+      .map(([topicId, stats]) => ({
+        topicId,
+        correct: stats.correct,
+        total: stats.total,
+      }));
 
     await this.prisma.weaknessAnalysis.create({
       data: {
@@ -43,17 +55,32 @@ export class RoadmapService {
     if (weakTopics.length === 0) return;
 
     const stages = weakTopics.flatMap((wt) =>
-      ROADMAP_STAGES.map((stage) => ({ topicId: wt.topicId, stage, status: 'PENDING' })),
+      ROADMAP_STAGES.map((stage) => ({
+        topicId: wt.topicId,
+        stage,
+        status: 'PENDING',
+      })),
     );
 
     const existing = await this.prisma.studyRoadmap.findFirst({
-      where: { studentId: attempt.studentId, subjectId: attempt.exam.subjectId, status: RoadmapStatus.ACTIVE },
+      where: {
+        studentId: attempt.studentId,
+        subjectId: attempt.exam.subjectId,
+        status: RoadmapStatus.ACTIVE,
+      },
     });
     if (existing) {
-      await this.prisma.studyRoadmap.update({ where: { id: existing.id }, data: { stages } });
+      await this.prisma.studyRoadmap.update({
+        where: { id: existing.id },
+        data: { stages },
+      });
     } else {
       await this.prisma.studyRoadmap.create({
-        data: { studentId: attempt.studentId, subjectId: attempt.exam.subjectId, stages },
+        data: {
+          studentId: attempt.studentId,
+          subjectId: attempt.exam.subjectId,
+          stages,
+        },
       });
     }
   }

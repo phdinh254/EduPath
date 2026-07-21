@@ -13,13 +13,19 @@ export class RoadmapController {
 
   @Roles(Role.STUDENT)
   @Get('me/weaknesses')
-  findMyWeaknesses(@CurrentUser() user: JwtPayload, @Query('subjectId') subjectId?: string) {
+  findMyWeaknesses(
+    @CurrentUser() user: JwtPayload,
+    @Query('subjectId') subjectId?: string,
+  ) {
     return this.roadmapService.findWeaknessesForStudent(user.sub, subjectId);
   }
 
   @Roles(Role.STUDENT)
   @Get('me/study-roadmap')
-  findMyRoadmap(@CurrentUser() user: JwtPayload, @Query('subjectId') subjectId?: string) {
+  findMyRoadmap(
+    @CurrentUser() user: JwtPayload,
+    @Query('subjectId') subjectId?: string,
+  ) {
     return this.roadmapService.findRoadmapForStudent(user.sub, subjectId);
   }
 }

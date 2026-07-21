@@ -21,7 +21,10 @@ export class QuestionsController {
 
   @Roles(Role.TEACHER, Role.ADMIN)
   @Get()
-  findAll(@CurrentUser() user: JwtPayload, @Query('status') status?: ContentStatus) {
+  findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query('status') status?: ContentStatus,
+  ) {
     return this.questionsService.findAll(user, status);
   }
 
@@ -45,7 +48,11 @@ export class QuestionsController {
 
   @Roles(Role.ADMIN)
   @Post(':id/reject')
-  reject(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: RejectQuestionDto) {
+  reject(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: RejectQuestionDto,
+  ) {
     return this.questionsService.reject(id, user.sub, dto.reason);
   }
 }
