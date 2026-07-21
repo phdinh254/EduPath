@@ -7,9 +7,12 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        // Chạy trực tiếp trên máy: backend ở localhost. Chạy qua Docker Compose:
+        // đặt VITE_DEV_PROXY_TARGET=http://backend:3000 (tên service trong compose network).
+        target: process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:3000',
         changeOrigin: true,
         // Backend has no global "/api" prefix - its routes live at the root (e.g. /auth/login).
         rewrite: (path) => path.replace(/^\/api/, ''),
