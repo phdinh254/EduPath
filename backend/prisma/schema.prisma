@@ -116,7 +116,9 @@ model Class {
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name     String
   // Mã lớp dùng để học sinh tự tham gia
-  inviteCode String @unique
+  inviteCode String  @unique
+  // Nếu true: lớp xuất hiện trong danh sách công khai để học sinh tự duyệt và tham gia
+  isPublic   Boolean @default(false)
 
   studentClasses StudentClass[]
   exams          Exam[]

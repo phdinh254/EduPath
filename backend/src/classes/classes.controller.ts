@@ -84,6 +84,18 @@ export class ClassesController {
     return this.classesService.findMyClasses(user.sub);
   }
 
+  @Roles(Role.STUDENT)
+  @Get('public')
+  findPublic() {
+    return this.classesService.findPublicClasses();
+  }
+
+  @Roles(Role.STUDENT)
+  @Post(':id/join-public')
+  joinPublic(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.classesService.joinPublicClass(user.sub, id);
+  }
+
   private assertTenant(user: JwtPayload) {
     if (!user.tenantId) {
       throw new ForbiddenException('Tài khoản giáo viên chưa có tenant');

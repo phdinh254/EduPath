@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -12,6 +13,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+
+interface JwtPayloadShape {
+  sub: string;
+  email: string;
+  role: string;
+  tenantId?: string;
+  exp: number;
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 @Injectable()
 export class AuthService {
@@ -64,6 +77,59 @@ export class AuthService {
     );
   }
 
+  async refresh(refreshToken: string) {
+    let payload: JwtPayloadShape;
+    try {
+      payload = await this.jwtService.verifyAsync<JwtPayloadShape>(
+        refreshToken,
+        {
+          secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
+        },
+      );
+    } catch {
+      throw new UnauthorizedException(
+        'Refresh token không hợp lệ hoặc đã hết hạn',
+      );
+    }
+
+    const tokenHash = hashToken(refreshToken);
+    const stored = await this.prisma.refreshToken.findFirst({
+      where: { userId: payload.sub, tokenHash, revokedAt: null },
+    });
+    if (!stored || stored.expiresAt <= new Date()) {
+      throw new UnauthorizedException(
+        'Refresh token không hợp lệ hoặc đã hết hạn',
+      );
+    }
+
+    // Xoay vòng: thu hồi refresh token cũ ngay khi dùng để tránh tái sử dụng (replay).
+    await this.prisma.refreshToken.update({
+      where: { id: stored.id },
+      data: { revokedAt: new Date() },
+    });
+
+    const user = await this.usersService.findByIdWithTenant(payload.sub);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Tài khoản không còn hoạt động');
+    }
+
+    return this.buildTokens(
+      user.id,
+      user.email,
+      user.role,
+      user.ownedTenant?.id,
+    );
+  }
+
+  async logout(refreshToken: string) {
+    const tokenHash = hashToken(refreshToken);
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { success: true };
+  }
+
   private async buildTokens(
     sub: string,
     email: string,
@@ -76,11 +142,24 @@ export class AuthService {
         secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
         expiresIn: this.config.get<string>('JWT_ACCESS_EXPIRES_IN') ?? '15m',
       } as JwtSignOptions),
-      this.jwtService.signAsync(payload, {
+      // jti đảm bảo mỗi refresh token là duy nhất ngay cả khi cấp trong cùng một giây
+      // với cùng payload (JWT ký HMAC là deterministic nên nếu không có jti, hai token
+      // cấp liên tiếp có thể trùng hệt nhau, làm hỏng cơ chế thu hồi khi xoay vòng).
+      this.jwtService.signAsync({ ...payload, jti: randomUUID() }, {
         secret: this.config.getOrThrow<string>('JWT_REFRESH_SECRET'),
         expiresIn: this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '7d',
       } as JwtSignOptions),
     ]);
+
+    const decoded = this.jwtService.decode<JwtPayloadShape>(refreshToken);
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: sub,
+        tokenHash: hashToken(refreshToken),
+        expiresAt: new Date(decoded.exp * 1000),
+      },
+    });
+
     return { accessToken, refreshToken };
   }
 }

@@ -29,9 +29,49 @@ export class ClassesService {
       data: {
         tenantId: tenant.id,
         name: dto.name,
+        isPublic: dto.isPublic ?? false,
         inviteCode: generateInviteCode(),
       },
     });
+  }
+
+  // Danh sách lớp công khai để học sinh tự duyệt và tham gia không cần mã mời.
+  findPublicClasses() {
+    return this.prisma.class.findMany({
+      where: { isPublic: true },
+      include: { tenant: { select: { name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private async joinClass(studentId: string, classId: string) {
+    const existing = await this.prisma.studentClass.findUnique({
+      where: { studentId_classId: { studentId, classId } },
+    });
+    if (existing && existing.status === StudentClassStatus.ACTIVE) {
+      throw new ConflictException('Học sinh đã ở trong lớp này');
+    }
+    if (existing) {
+      return this.prisma.studentClass.update({
+        where: { id: existing.id },
+        data: {
+          status: StudentClassStatus.ACTIVE,
+          removedAt: null,
+          joinedAt: new Date(),
+        },
+      });
+    }
+    return this.prisma.studentClass.create({ data: { studentId, classId } });
+  }
+
+  async joinPublicClass(studentId: string, classId: string) {
+    const klass = await this.prisma.class.findUnique({
+      where: { id: classId },
+    });
+    if (!klass || !klass.isPublic) {
+      throw new NotFoundException('Không tìm thấy lớp công khai này');
+    }
+    return this.joinClass(studentId, classId);
   }
 
   findAllForTenant(tenantId: string) {
@@ -69,25 +109,7 @@ export class ClassesService {
     if (!klass) {
       throw new NotFoundException('Mã lớp không hợp lệ');
     }
-    const existing = await this.prisma.studentClass.findUnique({
-      where: { studentId_classId: { studentId, classId: klass.id } },
-    });
-    if (existing && existing.status === StudentClassStatus.ACTIVE) {
-      throw new ConflictException('Học sinh đã ở trong lớp này');
-    }
-    if (existing) {
-      return this.prisma.studentClass.update({
-        where: { id: existing.id },
-        data: {
-          status: StudentClassStatus.ACTIVE,
-          removedAt: null,
-          joinedAt: new Date(),
-        },
-      });
-    }
-    return this.prisma.studentClass.create({
-      data: { studentId, classId: klass.id },
-    });
+    return this.joinClass(studentId, klass.id);
   }
 
   async removeStudent(classId: string, studentId: string, tenantId: string) {
@@ -119,7 +141,7 @@ export class ClassesService {
     await this.assertTeacherOwnsClass(classId, tenantId);
     return this.prisma.class.update({
       where: { id: classId },
-      data: { name: dto.name },
+      data: { name: dto.name, isPublic: dto.isPublic },
     });
   }
 

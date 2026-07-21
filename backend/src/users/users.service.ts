@@ -17,6 +17,13 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
+  findByIdWithTenant(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { ownedTenant: true },
+    });
+  }
+
   create(data: {
     email: string;
     passwordHash: string;
