@@ -93,20 +93,27 @@ export class AuthService {
     }
 
     const tokenHash = hashToken(refreshToken);
-    const stored = await this.prisma.refreshToken.findFirst({
-      where: { userId: payload.sub, tokenHash, revokedAt: null },
+
+    // Thu hồi bằng một câu UPDATE nguyên tử có điều kiện (chưa thu hồi + chưa hết hạn)
+    // thay vì findFirst rồi update riêng — tránh race khi 2 request refresh đồng thời
+    // dùng chung một token đều đọc thấy "hợp lệ" trước khi request kia kịp ghi, dẫn
+    // đến token gốc bị "nhân bản" thành hai phiên hợp lệ. count > 0 nghĩa là chính
+    // request này đã giành quyền thu hồi token; các request khác trên cùng token sẽ
+    // thấy count === 0 do điều kiện revokedAt: null không còn đúng nữa.
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: {
+        userId: payload.sub,
+        tokenHash,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { revokedAt: new Date() },
     });
-    if (!stored || stored.expiresAt <= new Date()) {
+    if (count === 0) {
       throw new UnauthorizedException(
         'Refresh token không hợp lệ hoặc đã hết hạn',
       );
     }
-
-    // Xoay vòng: thu hồi refresh token cũ ngay khi dùng để tránh tái sử dụng (replay).
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
-      data: { revokedAt: new Date() },
-    });
 
     const user = await this.usersService.findByIdWithTenant(payload.sub);
     if (!user || !user.isActive) {
