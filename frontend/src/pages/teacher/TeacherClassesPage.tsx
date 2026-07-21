@@ -16,6 +16,7 @@ export function TeacherClassesPage() {
   const [editing, setEditing] = useState<SchoolClass | null>(null);
   const [deleting, setDeleting] = useState<SchoolClass | null>(null);
   const [name, setName] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({ queryKey: ['classes'], queryFn: fetchMyClasses });
@@ -23,7 +24,7 @@ export function TeacherClassesPage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['classes'] });
 
   const createMutation = useMutation({
-    mutationFn: () => createClass({ name }),
+    mutationFn: () => createClass({ name, isPublic }),
     onSuccess: () => {
       showToast('Tạo lớp thành công', 'success');
       setShowCreate(false);
@@ -34,7 +35,7 @@ export function TeacherClassesPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: () => updateClass(editing!.id, { name }),
+    mutationFn: () => updateClass(editing!.id, { name, isPublic }),
     onSuccess: () => {
       showToast('Cập nhật lớp thành công', 'success');
       setEditing(null);
@@ -58,12 +59,14 @@ export function TeacherClassesPage() {
 
   function openCreate() {
     setName('');
+    setIsPublic(false);
     setFormError(null);
     setShowCreate(true);
   }
 
   function openEdit(klass: SchoolClass) {
     setName(klass.name);
+    setIsPublic(klass.isPublic);
     setFormError(null);
     setEditing(klass);
   }
@@ -106,6 +109,7 @@ export function TeacherClassesPage() {
               </Link>
               <p className="text-xs text-slate-500">
                 Mã mời: <span className="font-mono">{klass.inviteCode}</span>
+                {klass.isPublic && ' · Công khai'}
               </p>
             </div>
             <div className="flex gap-2 text-sm">
@@ -131,6 +135,10 @@ export function TeacherClassesPage() {
               placeholder="Tên lớp"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
             />
+            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+              Công khai (học sinh có thể tự duyệt và tham gia không cần mã mời)
+            </label>
             {formError && <ErrorState message={formError} />}
             <button
               type="submit"
@@ -153,6 +161,10 @@ export function TeacherClassesPage() {
               onChange={(e) => setName(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 dark:border-slate-700 dark:bg-slate-900"
             />
+            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+              Công khai (học sinh có thể tự duyệt và tham gia không cần mã mời)
+            </label>
             {formError && <ErrorState message={formError} />}
             <button
               type="submit"

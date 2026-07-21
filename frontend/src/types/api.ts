@@ -41,8 +41,10 @@ export interface SchoolClass {
   tenantId: string;
   name: string;
   inviteCode: string;
+  isPublic: boolean;
   createdAt: string;
   updatedAt: string;
+  tenant?: { name: string };
 }
 
 export interface StudentClassLink {

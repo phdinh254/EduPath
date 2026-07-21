@@ -7,12 +7,15 @@ export async function fetchMyClasses(): Promise<SchoolClass[]> {
   return data;
 }
 
-export async function createClass(payload: { name: string }): Promise<SchoolClass> {
+export async function createClass(payload: { name: string; isPublic?: boolean }): Promise<SchoolClass> {
   const { data } = await apiClient.post<SchoolClass>('/classes', payload);
   return data;
 }
 
-export async function updateClass(classId: string, payload: { name: string }): Promise<SchoolClass> {
+export async function updateClass(
+  classId: string,
+  payload: { name: string; isPublic?: boolean },
+): Promise<SchoolClass> {
   const { data } = await apiClient.patch<SchoolClass>(`/classes/${classId}`, payload);
   return data;
 }
@@ -38,5 +41,15 @@ export async function fetchMyEnrolledClasses(): Promise<StudentClassLink[]> {
 
 export async function joinClassByInviteCode(inviteCode: string): Promise<StudentClassLink> {
   const { data } = await apiClient.post<StudentClassLink>('/classes/join', { inviteCode });
+  return data;
+}
+
+export async function fetchPublicClasses(): Promise<SchoolClass[]> {
+  const { data } = await apiClient.get<SchoolClass[]>('/classes/public');
+  return data;
+}
+
+export async function joinPublicClass(classId: string): Promise<StudentClassLink> {
+  const { data } = await apiClient.post<StudentClassLink>(`/classes/${classId}/join-public`);
   return data;
 }

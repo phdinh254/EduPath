@@ -28,3 +28,12 @@ export async function fetchMe(): Promise<UserProfile> {
   const { data } = await apiClient.get<UserProfile>('/users/me');
   return data;
 }
+
+export async function refreshRequest(refreshToken: string): Promise<AuthTokens> {
+  const { data } = await apiClient.post<AuthTokens>('/auth/refresh', { refreshToken });
+  return data;
+}
+
+export async function logoutRequest(refreshToken: string): Promise<void> {
+  await apiClient.post('/auth/logout', { refreshToken });
+}

@@ -1,7 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { setUnauthorizedHandler } from '../../lib/api-client';
 import type { UserProfile } from '../../types/api';
-import { fetchMe, loginRequest, registerRequest, type LoginPayload, type RegisterPayload } from './authApi';
+import {
+  fetchMe,
+  loginRequest,
+  logoutRequest,
+  registerRequest,
+  type LoginPayload,
+  type RegisterPayload,
+} from './authApi';
 
 interface AuthContextValue {
   user: UserProfile | null;
@@ -19,9 +26,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const logout = useCallback(() => {
+    const storedRefreshToken = localStorage.getItem('refreshToken');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     setUser(null);
+    // Thu hồi refresh token phía server, không cần chờ kết quả (best-effort).
+    if (storedRefreshToken) {
+      logoutRequest(storedRefreshToken).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
