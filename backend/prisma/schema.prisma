@@ -258,6 +258,11 @@ model Answer {
   aiComment          String?
   isAiReferenceOnly  Boolean @default(false)
 
+  // Giải thích AI cho câu trắc nghiệm/đúng-sai/trả lời ngắn bị sai — sinh và
+  // lưu (cache) lần đầu học sinh yêu cầu, không tính sẵn lúc chấm để không
+  // làm chậm việc nộp bài.
+  aiExplanation String?
+
   scoreOverride ScoreOverride?
 
   createdAt DateTime @default(now())

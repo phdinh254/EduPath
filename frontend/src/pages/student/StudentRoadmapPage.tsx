@@ -42,12 +42,20 @@ export function StudentRoadmapPage() {
             {analysis.weakTopics.length === 0 ? (
               <p className="text-sm text-emerald-600">Không phát hiện chuyên đề yếu trong lần này.</p>
             ) : (
-              <ul className="list-disc pl-5 text-sm text-slate-600 dark:text-slate-400">
-                {analysis.weakTopics.map((wt) => (
-                  <li key={wt.topicId}>
-                    Chuyên đề cần ôn tập ưu tiên — đúng {wt.correct}/{wt.total} câu
-                  </li>
-                ))}
+              <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                {analysis.weakTopics.map((wt) => {
+                  const advice = analysis.details?.adviceByTopic?.[wt.topicId];
+                  return (
+                    <li key={wt.topicId} className="list-disc pl-5">
+                      Chuyên đề cần ôn tập ưu tiên — đúng {wt.correct}/{wt.total} câu
+                      {advice && (
+                        <p className="mt-1 rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                          🤖 {advice}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

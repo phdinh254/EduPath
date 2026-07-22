@@ -122,6 +122,7 @@ export interface ExamAttempt {
 
 export interface AttemptReviewItem {
   questionId: string;
+  answerId: string | null;
   content: string;
   type: QuestionType;
   options: unknown;
@@ -134,6 +135,7 @@ export interface AttemptReviewItem {
   aiPreliminaryScore: number | null;
   aiComment: string | null;
   isAiReferenceOnly: boolean;
+  aiExplanation: string | null;
 }
 
 export interface WeaknessAnalysis {
@@ -142,7 +144,8 @@ export interface WeaknessAnalysis {
   subjectId: string;
   attemptId: string | null;
   weakTopics: { topicId: string; correct: number; total: number }[];
-  details: unknown;
+  // adviceByTopic được AI sinh nền sau khi chấm — có thể chưa xuất hiện ngay.
+  details: { adviceByTopic?: Record<string, string> } | null;
   generatedAt: string;
 }
 

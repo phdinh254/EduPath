@@ -18,3 +18,8 @@ export async function reviewEssayAnswer(
   const { data } = await apiClient.post<ExamAttempt>(`/grading/answers/${answerId}/review`, payload);
   return data;
 }
+
+export async function explainWrongAnswer(answerId: string): Promise<{ aiExplanation: string }> {
+  const { data } = await apiClient.post<{ aiExplanation: string }>(`/grading/answers/${answerId}/explain`);
+  return data;
+}

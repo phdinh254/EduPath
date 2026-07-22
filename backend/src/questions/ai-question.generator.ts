@@ -1,8 +1,8 @@
-// Bộ sinh câu hỏi tự động — MVP rule-based/templated để hệ thống có thể vận
-// hành luồng "AI soạn đề" ngay mà không cần giáo viên, thay thế bằng lời gọi
-// LLM API thật (có kiểm soát chống sao chép nguyên văn đề thi/bản quyền) khi
-// tích hợp. Không lấy nguyên văn bất kỳ đề thi/câu hỏi thật nào — nội dung ở
-// đây là văn bản tự sinh theo khuôn mẫu, chỉ dùng làm khung dữ liệu.
+// Bộ sinh câu hỏi tự động. Khi đã cấu hình GEMINI_API_KEY, QuestionsService
+// gọi Gemini thật (xem synthesizeQuestionPrompt bên dưới) để soạn nội dung
+// mới; hàm synthesizeQuestion() ở đây là fallback rule-based/templated khi
+// chưa cấu hình hoặc Gemini gặp sự cố — không lấy nguyên văn bất kỳ đề
+// thi/câu hỏi thật nào, chỉ dùng làm khung dữ liệu.
 import { DifficultyLevel, QuestionType } from '@prisma/client';
 
 export interface SynthesizedQuestion {
@@ -19,12 +19,54 @@ export interface SynthesizeParams {
   index: number;
 }
 
-const DIFFICULTY_LABEL: Record<DifficultyLevel, string> = {
+export const DIFFICULTY_LABEL: Record<DifficultyLevel, string> = {
   [DifficultyLevel.KNOWLEDGE]: 'nhận biết',
   [DifficultyLevel.COMPREHENSION]: 'thông hiểu',
   [DifficultyLevel.APPLICATION]: 'vận dụng',
   [DifficultyLevel.HIGH_APPLICATION]: 'vận dụng cao',
 };
+
+const TYPE_LABEL: Record<QuestionType, string> = {
+  [QuestionType.MULTIPLE_CHOICE]:
+    'trắc nghiệm nhiều lựa chọn (4 phương án, 1 đáp án đúng)',
+  [QuestionType.TRUE_FALSE]:
+    'đúng/sai (4 ý nhỏ a, b, c, d — mỗi ý đúng hoặc sai độc lập)',
+  [QuestionType.SHORT_ANSWER]:
+    'trắc nghiệm trả lời ngắn (điền một giá trị/số/từ ngắn)',
+  [QuestionType.ESSAY]: 'tự luận Ngữ văn (Đọc hiểu + Viết)',
+};
+
+const SCHEMA_HINT: Record<QuestionType, string> = {
+  [QuestionType.MULTIPLE_CHOICE]:
+    '{"content": string, "options": [string, string, string, string], "correctAnswer": {"index": 0|1|2|3}, "explanation": string}',
+  [QuestionType.TRUE_FALSE]:
+    '{"content": string, "options": [string, string, string, string] (nội dung 4 ý a-d), "correctAnswer": {"statements": [boolean, boolean, boolean, boolean]}, "explanation": string}',
+  [QuestionType.SHORT_ANSWER]:
+    '{"content": string, "options": null, "correctAnswer": {"value": string}, "explanation": string}',
+  [QuestionType.ESSAY]:
+    '{"content": string (đề bài Đọc hiểu + Viết đầy đủ), "options": null, "correctAnswer": null, "explanation": ""}',
+};
+
+// Prompt gửi cho Gemini — dùng chung bởi QuestionsService khi đã cấu hình AI thật.
+export function buildSynthesizePrompt(params: {
+  type: QuestionType;
+  difficulty: DifficultyLevel;
+  subjectName: string;
+  topicName: string;
+}): string {
+  const { type, difficulty, subjectName, topicName } = params;
+  return `Bạn là chuyên gia biên soạn đề thi THPT quốc gia môn "${subjectName}" tại Việt Nam, theo cấu trúc đề thi từ 2025.
+
+Hãy TỰ SOẠN một câu hỏi HOÀN TOÀN MỚI — KHÔNG sao chép nguyên văn bất kỳ đề thi chính thức của Bộ GD&ĐT, sách giáo khoa, hay tài liệu có bản quyền của bên thứ ba nào. Nội dung phải do bạn tự biên soạn.
+
+Yêu cầu:
+- Chuyên đề: "${topicName}"
+- Mức độ: ${DIFFICULTY_LABEL[difficulty]}
+- Dạng câu: ${TYPE_LABEL[type]}
+
+Trả về DUY NHẤT một JSON đúng schema sau, không kèm bất kỳ văn bản giải thích nào khác ngoài JSON:
+${SCHEMA_HINT[type]}`;
+}
 
 // Dùng index làm seed để kết quả tái lập được (không phụ thuộc Math.random),
 // tránh sinh hai lần ra hai câu khác nhau cho cùng một yêu cầu.

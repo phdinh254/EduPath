@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, RoadmapStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { GeminiService } from '../ai/gemini.service';
 
 // Ngưỡng tỷ lệ đúng để coi một chuyên đề là "điểm yếu" cần ưu tiên ôn tập.
 const WEAK_TOPIC_THRESHOLD = 0.5;
@@ -26,7 +27,12 @@ const ROADMAP_STAGES = [
 
 @Injectable()
 export class RoadmapService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(RoadmapService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gemini: GeminiService,
+  ) {}
 
   // Được gọi tự động sau khi một lượt làm bài được chấm xong hoàn toàn (GradingService).
   // Đề ĐGNL gồm nhiều môn trong cùng một lượt làm bài (mỗi section một môn),
@@ -63,7 +69,7 @@ export class RoadmapService {
       const subjectBreakdown = Object.fromEntries(
         Object.entries(breakdown).filter(([, s]) => s.subjectId === subjectId),
       );
-      await this.prisma.weaknessAnalysis.create({
+      const weaknessAnalysis = await this.prisma.weaknessAnalysis.create({
         data: {
           studentId: attempt.studentId,
           subjectId,
@@ -76,8 +82,53 @@ export class RoadmapService {
       });
       if (weakTopics.length > 0) {
         await this.upsertRoadmap(attempt.studentId, subjectId, weakTopics);
+        if (this.gemini.isConfigured()) {
+          // Fire-and-forget: không chặn việc chấm điểm/tạo lộ trình (vốn phải
+          // tức thời) — lời khuyên AI sẽ xuất hiện sau vài giây khi học sinh
+          // xem lại trang lộ trình.
+          this.generateAdviceInBackground(
+            weaknessAnalysis.id,
+            weakTopics,
+          ).catch((err: unknown) =>
+            this.logger.warn(
+              `Không sinh được lời khuyên AI cho weaknessAnalysis ${weaknessAnalysis.id}: ${String(err)}`,
+            ),
+          );
+        }
       }
     }
+  }
+
+  private async generateAdviceInBackground(
+    weaknessAnalysisId: string,
+    weakTopics: WeakTopic[],
+  ) {
+    const topics = await this.prisma.topic.findMany({
+      where: { id: { in: weakTopics.map((wt) => wt.topicId) } },
+    });
+    const topicNameById = new Map(topics.map((t) => [t.id, t.name]));
+
+    const adviceByTopic: Record<string, string> = {};
+    for (const wt of weakTopics) {
+      const topicName = topicNameById.get(wt.topicId) ?? wt.topicId;
+      const prompt = `Bạn là gia sư luyện thi THPT tại Việt Nam. Học sinh làm đúng ${wt.correct}/${wt.total} câu ở chuyên đề "${topicName}" — đây là chuyên đề yếu cần ưu tiên ôn tập. Hãy viết 2-3 câu lời khuyên cụ thể, thực tế bằng tiếng Việt giúp học sinh cải thiện chuyên đề này (nên ôn lại phần nào, luyện dạng bài gì). Chỉ trả về đoạn văn lời khuyên, không dùng JSON, không nhắc lại số liệu đã cho.`;
+      try {
+        adviceByTopic[wt.topicId] = await this.gemini.generateText(prompt);
+      } catch {
+        // Bỏ qua chuyên đề bị lỗi, không để một lời gọi hỏng chặn các chuyên đề còn lại.
+      }
+    }
+    if (Object.keys(adviceByTopic).length === 0) return;
+
+    const record = await this.prisma.weaknessAnalysis.findUnique({
+      where: { id: weaknessAnalysisId },
+    });
+    if (!record) return;
+    const details = (record.details as Record<string, unknown> | null) ?? {};
+    await this.prisma.weaknessAnalysis.update({
+      where: { id: weaknessAnalysisId },
+      data: { details: { ...details, adviceByTopic } },
+    });
   }
 
   private async upsertRoadmap(

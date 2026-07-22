@@ -89,4 +89,28 @@ export class GradingController {
       dto.comment,
     );
   }
+
+  @Roles(Role.STUDENT, Role.ADMIN)
+  @Post('answers/:answerId/explain')
+  @ApiOperation({
+    summary: 'AI giải thích tại sao câu trả lời sai',
+    description:
+      'Chỉ áp dụng cho câu trắc nghiệm/đúng-sai/trả lời ngắn đã chấm sai (không áp dụng cho tự luận). Học sinh chỉ xem được giải thích cho bài của chính mình. Kết quả được cache lại, chỉ gọi AI thật ở lần yêu cầu đầu tiên.',
+  })
+  @ApiParam({ name: 'answerId', description: 'ID câu trả lời' })
+  @ApiResponse({ status: 201, description: 'Trả về giải thích AI.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Câu trả lời là tự luận hoặc chưa sai.',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Tính năng giải thích AI chưa được cấu hình trên máy chủ.',
+  })
+  explain(
+    @CurrentUser() user: JwtPayload,
+    @Param('answerId') answerId: string,
+  ) {
+    return this.gradingService.explainWrongAnswer(answerId, user);
+  }
 }

@@ -10,10 +10,15 @@ import {
   QuestionType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { GeminiService } from '../ai/gemini.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { GenerateQuestionsDto } from './dto/generate-questions.dto';
-import { synthesizeQuestion } from './ai-question.generator';
+import {
+  buildSynthesizePrompt,
+  synthesizeQuestion,
+  type SynthesizedQuestion,
+} from './ai-question.generator';
 
 function assertValidTrueFalse(dto: {
   type: QuestionType;
@@ -34,7 +39,31 @@ function assertValidTrueFalse(dto: {
 
 @Injectable()
 export class QuestionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gemini: GeminiService,
+  ) {}
+
+  // Gemini thật khi đã cấu hình; rơi về mẫu rule-based (synthesizeQuestion)
+  // nếu chưa cấu hình hoặc Gemini lỗi — không để sự cố bên thứ ba chặn việc
+  // sinh đề/câu hỏi.
+  private async synthesize(params: {
+    type: QuestionType;
+    difficulty: DifficultyLevel;
+    subjectName: string;
+    topicName: string;
+    index: number;
+  }): Promise<SynthesizedQuestion> {
+    if (!this.gemini.isConfigured()) {
+      return synthesizeQuestion(params);
+    }
+    try {
+      const prompt = buildSynthesizePrompt(params);
+      return await this.gemini.generateJson<SynthesizedQuestion>(prompt);
+    } catch {
+      return synthesizeQuestion(params);
+    }
+  }
 
   // Nội dung do ADMIN tạo thủ công luôn vào thẳng kho dùng chung, vì ADMIN là
   // bên duyệt nội dung cuối cùng.
@@ -57,15 +86,17 @@ export class QuestionsService {
   async generateBatch(user: JwtPayload, dto: GenerateQuestionsDto) {
     const topic = await this.prisma.topic.findUnique({
       where: { id: dto.topicId },
+      include: { subject: true },
     });
     if (!topic || topic.subjectId !== dto.subjectId) {
       throw new NotFoundException('Không tìm thấy chuyên đề thuộc môn học này');
     }
     const created = await Promise.all(
-      Array.from({ length: dto.count }, (_, index) => {
-        const synthesized = synthesizeQuestion({
+      Array.from({ length: dto.count }, async (_, index) => {
+        const synthesized = await this.synthesize({
           type: dto.type,
           difficulty: dto.difficulty,
+          subjectName: topic.subject.name,
           topicName: topic.name,
           index,
         });
@@ -114,6 +145,7 @@ export class QuestionsService {
     const missing = params.count - existing.length;
     const topic = await this.prisma.topic.findFirst({
       where: { subjectId: params.subjectId },
+      include: { subject: true },
     });
     if (!topic) {
       throw new BadRequestException(
@@ -122,10 +154,11 @@ export class QuestionsService {
     }
     const difficulty = params.difficulty ?? 'KNOWLEDGE';
     const synthesizedRows = await Promise.all(
-      Array.from({ length: missing }, (_, i) => {
-        const synthesized = synthesizeQuestion({
+      Array.from({ length: missing }, async (_, i) => {
+        const synthesized = await this.synthesize({
           type: params.type,
           difficulty,
+          subjectName: topic.subject.name,
           topicName: topic.name,
           index: existing.length + i,
         });

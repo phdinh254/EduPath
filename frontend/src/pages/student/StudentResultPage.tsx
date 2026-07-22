@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { fetchAttempt, fetchAttemptReview } from '../../features/exams/examsApi';
+import { explainWrongAnswer } from '../../features/grading/gradingApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { ErrorState, LoadingState } from '../../components/StateViews';
 
@@ -31,6 +33,41 @@ function formatCorrectAnswer(correctAnswer: unknown, options: unknown): string {
   }
   if (typeof c.value === 'string') return c.value;
   return JSON.stringify(correctAnswer);
+}
+
+function WrongAnswerExplain({ answerId, cached }: { answerId: string; cached: string | null }) {
+  const [explanation, setExplanation] = useState<string | null>(cached);
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => explainWrongAnswer(answerId),
+    onSuccess: (data) => setExplanation(data.aiExplanation),
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  if (explanation) {
+    return (
+      <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+        🤖 {explanation}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => {
+          setError(null);
+          mutation.mutate();
+        }}
+        disabled={mutation.isPending}
+        className="rounded-lg border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        {mutation.isPending ? 'Đang hỏi AI...' : '🤖 Giải thích tại sao sai'}
+      </button>
+      {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
+    </div>
+  );
 }
 
 export function StudentResultPage() {
@@ -87,6 +124,9 @@ export function StudentResultPage() {
                 >
                   {item.isCorrect ? 'Đúng' : 'Sai'} · {item.scoreAwarded ?? 0}/{item.maxScore} điểm
                 </p>
+                {item.isCorrect === false && item.answerId && (
+                  <WrongAnswerExplain answerId={item.answerId} cached={item.aiExplanation} />
+                )}
               </>
             ) : (
               <div className="mt-2 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">

@@ -398,6 +398,7 @@ export class ExamsService {
       const answer = answersByQuestionId.get(eq.questionId);
       return {
         questionId: eq.questionId,
+        answerId: answer?.id ?? null,
         content: eq.question.content,
         type: eq.question.type,
         options: eq.question.options,
@@ -410,6 +411,7 @@ export class ExamsService {
         aiPreliminaryScore: answer?.aiPreliminaryScore ?? null,
         aiComment: answer?.aiComment ?? null,
         isAiReferenceOnly: answer?.isAiReferenceOnly ?? false,
+        aiExplanation: answer?.aiExplanation ?? null,
       };
     });
   }

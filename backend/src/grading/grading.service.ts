@@ -3,10 +3,12 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { AttemptStatus, QuestionType } from '@prisma/client';
+import { AttemptStatus, QuestionType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoadmapService } from '../roadmap/roadmap.service';
+import { GeminiService } from '../ai/gemini.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import {
   gradeEssayPlaceholder,
@@ -15,12 +17,72 @@ import {
   gradeTrueFalse,
 } from './grading.utils';
 
+interface EssayGradeResult {
+  score: number;
+  comment: string;
+}
+
 @Injectable()
 export class GradingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly roadmapService: RoadmapService,
+    private readonly gemini: GeminiService,
   ) {}
+
+  // Dùng Gemini thật khi đã cấu hình; nếu chưa cấu hình hoặc Gemini lỗi
+  // (quota, mạng, JSON hỏng...) thì rơi về placeholder rule-based — không để
+  // sự cố ở bên thứ ba chặn học sinh nộp bài.
+  private async gradeEssay(
+    questionContent: string,
+    response: unknown,
+    maxScore: number,
+  ): Promise<EssayGradeResult> {
+    if (!this.gemini.isConfigured()) {
+      return gradeEssayPlaceholder(response, maxScore);
+    }
+    try {
+      return await this.gradeEssayWithGemini(
+        questionContent,
+        response,
+        maxScore,
+      );
+    } catch {
+      return gradeEssayPlaceholder(response, maxScore);
+    }
+  }
+
+  private async gradeEssayWithGemini(
+    questionContent: string,
+    response: unknown,
+    maxScore: number,
+  ): Promise<EssayGradeResult> {
+    const text = String(
+      (response as { text?: string } | null)?.text ?? '',
+    ).trim();
+    if (!text) {
+      return { score: 0, comment: 'Học sinh chưa nộp bài viết.' };
+    }
+    const prompt = `Bạn là giáo viên Ngữ văn THPT tại Việt Nam, chấm bài tự luận (Đọc hiểu + Viết) theo thang điểm tối đa ${maxScore}.
+Đề bài:
+"""${questionContent}"""
+
+Bài làm của học sinh:
+"""${text}"""
+
+Chấm điểm khách quan, công bằng, CHỈ dựa trên nội dung bài làm thực tế ở trên — không bịa thêm nội dung học sinh không viết. Trả về DUY NHẤT một JSON đúng schema sau, không kèm giải thích nào khác:
+{"score": <số từ 0 đến ${maxScore}, có thể lẻ đến 0.25>, "comment": "<nhận xét ngắn gọn bằng tiếng Việt: điểm mạnh và điểm cần cải thiện>"}`;
+
+    const result = await this.gemini.generateJson<{
+      score: number;
+      comment: string;
+    }>(prompt);
+    const score = Math.max(0, Math.min(maxScore, Number(result.score) || 0));
+    const comment =
+      String(result.comment ?? '').trim() ||
+      'AI đã chấm bài nhưng không có nhận xét chi tiết.';
+    return { score, comment };
+  }
 
   async submitAttempt(attemptId: string, user: JwtPayload) {
     const attempt = await this.prisma.examAttempt.findUnique({
@@ -52,7 +114,11 @@ export class GradingService {
         // AI chấm và công bố điểm tự luận ngay lập tức — luôn gắn nhãn "điểm
         // tham khảo do AI đánh giá". ADMIN có thể điều chỉnh lại sau qua
         // reviewEssay() mà không chặn học sinh xem điểm ngay.
-        const { score, comment } = gradeEssayPlaceholder(response, eq.maxScore);
+        const { score, comment } = await this.gradeEssay(
+          eq.question.content,
+          response,
+          eq.maxScore,
+        );
         await this.prisma.answer.upsert({
           where: {
             attemptId_questionId: { attemptId, questionId: eq.questionId },
@@ -189,6 +255,54 @@ export class GradingService {
     });
 
     return this.recomputeScore(answer.attemptId);
+  }
+
+  // Giải thích AI cho câu trắc nghiệm/đúng-sai/trả lời ngắn học sinh làm sai.
+  // Sinh và cache lần đầu được yêu cầu (không tính sẵn lúc chấm để không làm
+  // chậm việc nộp bài) — học sinh chỉ xem được giải thích cho bài của mình.
+  async explainWrongAnswer(answerId: string, user: JwtPayload) {
+    const answer = await this.prisma.answer.findUnique({
+      where: { id: answerId },
+      include: { question: true, attempt: true },
+    });
+    if (!answer) {
+      throw new NotFoundException('Không tìm thấy câu trả lời');
+    }
+    if (user.role !== Role.ADMIN && answer.attempt.studentId !== user.sub) {
+      throw new ForbiddenException('Bạn không có quyền xem giải thích này');
+    }
+    if (answer.question.type === QuestionType.ESSAY) {
+      throw new BadRequestException(
+        'Câu tự luận đã có nhận xét AI riêng, không áp dụng giải thích này',
+      );
+    }
+    if (answer.isCorrect !== false) {
+      throw new BadRequestException('Chỉ giải thích được cho câu đã làm sai');
+    }
+    if (answer.aiExplanation) {
+      return { aiExplanation: answer.aiExplanation };
+    }
+    if (!this.gemini.isConfigured()) {
+      throw new ServiceUnavailableException(
+        'Tính năng giải thích AI chưa được cấu hình trên máy chủ',
+      );
+    }
+
+    const prompt = `Bạn là giáo viên THPT tại Việt Nam. Học sinh đã làm SAI câu hỏi sau — hãy giải thích ngắn gọn, dễ hiểu bằng tiếng Việt tại sao câu trả lời của học sinh sai và vì sao đáp án đúng lại đúng, dựa CHÍNH XÁC vào dữ liệu dưới đây, không suy diễn hay bịa thêm thông tin ngoài đề bài:
+
+Câu hỏi: """${answer.question.content}"""
+Lựa chọn/định dạng câu hỏi: ${JSON.stringify(answer.question.options)}
+Đáp án đúng: ${JSON.stringify(answer.question.correctAnswer)}
+Câu trả lời của học sinh: ${JSON.stringify(answer.response)}
+
+Trả lời bằng 2-4 câu văn tiếng Việt thuần, không dùng định dạng JSON, không nhắc lại nguyên văn đề bài.`;
+
+    const aiExplanation = await this.gemini.generateText(prompt);
+    await this.prisma.answer.update({
+      where: { id: answerId },
+      data: { aiExplanation },
+    });
+    return { aiExplanation };
   }
 
   private async recomputeScore(attemptId: string) {
