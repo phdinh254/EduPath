@@ -15,7 +15,7 @@ export class GeminiService {
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     this.client = apiKey ? new GoogleGenerativeAI(apiKey) : null;
     this.modelName =
-      this.config.get<string>('GEMINI_MODEL') ?? 'gemini-2.0-flash';
+      this.config.get<string>('GEMINI_MODEL') ?? 'gemini-flash-latest';
   }
 
   isConfigured(): boolean {
