@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { fetchSubjects } from '../../features/subjects/subjectsApi';
+import { fetchExamStructure, fetchSubjects } from '../../features/subjects/subjectsApi';
 import {
   createExam,
   fetchExams,
@@ -12,7 +12,21 @@ import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { Modal } from '../../components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
-import type { ExamCategory } from '../../types/api';
+import type { DifficultyLevel, ExamCategory, QuestionType } from '../../types/api';
+
+const TYPE_LABEL: Record<QuestionType, string> = {
+  MULTIPLE_CHOICE: 'Trắc nghiệm nhiều lựa chọn',
+  TRUE_FALSE: 'Đúng/sai',
+  SHORT_ANSWER: 'Trả lời ngắn',
+  ESSAY: 'Tự luận',
+};
+
+const DIFFICULTY_LABEL: Record<DifficultyLevel, string> = {
+  KNOWLEDGE: 'Nhận biết',
+  COMPREHENSION: 'Thông hiểu',
+  APPLICATION: 'Vận dụng',
+  HIGH_APPLICATION: 'Vận dụng cao',
+};
 
 function CreateExamForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -89,12 +103,8 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
   const { showToast } = useToast();
   const [category, setCategory] = useState<ExamCategory>('THPT');
   const [title, setTitle] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState(90);
+  const [durationMinutes, setDurationMinutes] = useState<number | ''>('');
   const [subjectId, setSubjectId] = useState('');
-  const [multipleChoiceCount, setMultipleChoiceCount] = useState(24);
-  const [trueFalseCount, setTrueFalseCount] = useState(4);
-  const [shortAnswerCount, setShortAnswerCount] = useState(0);
-  const [essayCount, setEssayCount] = useState(0);
   const [sections, setSections] = useState<GenerateExamSectionPayload[]>([
     { name: 'Tư duy định lượng', subjectId: '', questionCount: 10, maxScore: 50 },
     { name: 'Tư duy định tính', subjectId: '', questionCount: 10, maxScore: 50 },
@@ -103,6 +113,12 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
   const [formError, setFormError] = useState<string | null>(null);
 
   const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: fetchSubjects });
+  const structureQuery = useQuery({
+    queryKey: ['exam-structure', subjectId],
+    queryFn: () => fetchExamStructure(subjectId),
+    enabled: category === 'THPT' && !!subjectId,
+  });
+  const structure = category === 'THPT' ? structureQuery.data : undefined;
 
   const generateMutation = useMutation({
     mutationFn: () =>
@@ -111,14 +127,15 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
           ? {
               title,
               category,
-              durationMinutes,
+              durationMinutes: durationMinutes === '' ? undefined : durationMinutes,
               subjectId,
-              multipleChoiceCount,
-              trueFalseCount,
-              shortAnswerCount,
-              essayCount,
             }
-          : { title, category, durationMinutes, sections },
+          : {
+              title,
+              category,
+              durationMinutes: durationMinutes === '' ? undefined : durationMinutes,
+              sections,
+            },
       ),
     onSuccess: () => {
       showToast('AI đã ghép đề thi hoàn chỉnh', 'success');
@@ -157,11 +174,12 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
       />
       <input
         type="number"
-        required
         min={1}
         value={durationMinutes}
-        onChange={(e) => setDurationMinutes(Number(e.target.value))}
-        placeholder="Thời gian làm bài (phút)"
+        onChange={(e) => setDurationMinutes(e.target.value === '' ? '' : Number(e.target.value))}
+        placeholder={
+          structure ? `Thời gian làm bài (phút) — mặc định ${structure.durationMinutes}` : 'Thời gian làm bài (phút)'
+        }
         className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
       />
 
@@ -180,51 +198,28 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
               </option>
             ))}
           </select>
-          <p className="text-xs text-slate-500">
-            Môn Ngữ văn: chỉ điền số câu tự luận, để trắc nghiệm bằng 0.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs text-slate-500">
-              Trắc nghiệm (0.25đ/câu)
-              <input
-                type="number"
-                min={0}
-                value={multipleChoiceCount}
-                onChange={(e) => setMultipleChoiceCount(Number(e.target.value))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-              />
-            </label>
-            <label className="text-xs text-slate-500">
-              Đúng/sai (thang lũy tiến)
-              <input
-                type="number"
-                min={0}
-                value={trueFalseCount}
-                onChange={(e) => setTrueFalseCount(Number(e.target.value))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-              />
-            </label>
-            <label className="text-xs text-slate-500">
-              Trả lời ngắn
-              <input
-                type="number"
-                min={0}
-                value={shortAnswerCount}
-                onChange={(e) => setShortAnswerCount(Number(e.target.value))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-              />
-            </label>
-            <label className="text-xs text-slate-500">
-              Tự luận (Văn)
-              <input
-                type="number"
-                min={0}
-                value={essayCount}
-                onChange={(e) => setEssayCount(Number(e.target.value))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
-              />
-            </label>
-          </div>
+
+          {subjectId && structureQuery.isLoading && <LoadingState label="Đang tải cấu trúc đề..." />}
+
+          {subjectId && !structureQuery.isLoading && !structure && (
+            <ErrorState message="Môn này chưa khai báo cấu trúc đề — vào trang Môn học để cấu hình trước khi ghép đề." />
+          )}
+
+          {structure && (
+            <div className="rounded-lg border border-slate-200 p-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              <p className="mb-1 font-medium text-slate-700 dark:text-slate-300">
+                Đề sẽ ghép theo cấu trúc cố định của môn:
+              </p>
+              <ul className="list-disc pl-4">
+                {structure.items.map((item) => (
+                  <li key={item.id}>
+                    {TYPE_LABEL[item.type]} · {DIFFICULTY_LABEL[item.difficulty]}: {item.questionCount} câu ×{' '}
+                    {item.maxScorePerQuestion}đ
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       ) : (
         <div className="space-y-3">
@@ -280,7 +275,7 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
       {formError && <ErrorState message={formError} />}
       <button
         type="submit"
-        disabled={generateMutation.isPending}
+        disabled={generateMutation.isPending || (category === 'THPT' && !structure)}
         className="rounded-lg bg-slate-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
       >
         {generateMutation.isPending ? 'Đang ghép đề...' : 'AI ghép đề'}

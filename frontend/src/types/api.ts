@@ -35,6 +35,25 @@ export interface Topic {
   createdAt: string;
 }
 
+export interface ExamStructureItem {
+  id: string;
+  structureId: string;
+  type: QuestionType;
+  difficulty: DifficultyLevel;
+  questionCount: number;
+  maxScorePerQuestion: number;
+  order: number;
+}
+
+export interface ExamStructure {
+  id: string;
+  subjectId: string;
+  durationMinutes: number;
+  items: ExamStructureItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Question {
   id: string;
   subjectId: string;

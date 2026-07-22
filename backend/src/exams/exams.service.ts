@@ -65,9 +65,22 @@ export class ExamsService {
     return this.generateThptExam(user, dto);
   }
 
+  // Số câu theo dạng × mức độ khó luôn lấy từ ExamStructure cố định của môn
+  // (khai báo qua SubjectsService.upsertExamStructure) — admin không còn tự
+  // gõ số lượng mỗi lần ghép đề, đảm bảo mọi đề cùng môn đúng 1 khuôn chung.
   private async generateThptExam(user: JwtPayload, dto: GenerateExamDto) {
     if (!dto.subjectId) {
       throw new BadRequestException('Đề THPT cần chỉ định subjectId');
+    }
+
+    const structure = await this.prisma.examStructure.findUnique({
+      where: { subjectId: dto.subjectId },
+      include: { items: { orderBy: { order: 'asc' } } },
+    });
+    if (!structure || structure.items.length === 0) {
+      throw new BadRequestException(
+        'Môn học chưa cấu hình cấu trúc đề — vào trang Môn học để khai báo trước khi ghép đề',
+      );
     }
 
     const exam = await this.prisma.exam.create({
@@ -75,46 +88,18 @@ export class ExamsService {
         title: dto.title,
         category: ExamCategory.THPT,
         subjectId: dto.subjectId,
-        durationMinutes: dto.durationMinutes,
+        durationMinutes: dto.durationMinutes ?? structure.durationMinutes,
         createdById: user.sub,
       },
     });
 
     let order = 1;
-    const essayCount = dto.essayCount ?? 0;
-    if (essayCount > 0) {
-      // Văn: chỉ tự luận (Đọc hiểu + Viết), không trộn trắc nghiệm.
-      const essayMaxScore = 10 / essayCount;
-      const essays = await this.questionsService.pickOrSynthesizeQuestions({
-        subjectId: dto.subjectId,
-        type: QuestionType.ESSAY,
-        count: essayCount,
-        creatorId: user.sub,
-      });
-      for (const q of essays) {
-        await this.prisma.examQuestion.create({
-          data: {
-            examId: exam.id,
-            questionId: q.id,
-            order: order++,
-            maxScore: essayMaxScore,
-          },
-        });
-      }
-      return this.withDetails(exam.id);
-    }
-
-    const plan: Array<[QuestionType, number, number]> = [
-      [QuestionType.MULTIPLE_CHOICE, dto.multipleChoiceCount ?? 24, 0.25],
-      [QuestionType.TRUE_FALSE, dto.trueFalseCount ?? 4, 1],
-      [QuestionType.SHORT_ANSWER, dto.shortAnswerCount ?? 0, 0.5],
-    ];
-    for (const [type, count, maxScore] of plan) {
-      if (count <= 0) continue;
+    for (const item of structure.items) {
       const questions = await this.questionsService.pickOrSynthesizeQuestions({
         subjectId: dto.subjectId,
-        type,
-        count,
+        type: item.type,
+        difficulty: item.difficulty,
+        count: item.questionCount,
         creatorId: user.sub,
       });
       for (const q of questions) {
@@ -123,7 +108,7 @@ export class ExamsService {
             examId: exam.id,
             questionId: q.id,
             order: order++,
-            maxScore,
+            maxScore: item.maxScorePerQuestion,
           },
         });
       }
@@ -136,6 +121,9 @@ export class ExamsService {
       throw new BadRequestException(
         'Đề ĐGNL cần khai báo sections (Toán/Ngôn ngữ/Khoa học...)',
       );
+    }
+    if (!dto.durationMinutes) {
+      throw new BadRequestException('Đề ĐGNL cần chỉ định durationMinutes');
     }
 
     const exam = await this.prisma.exam.create({

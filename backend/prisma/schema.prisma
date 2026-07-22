@@ -101,11 +101,41 @@ model Subject {
   code String @unique
   name String
 
-  topics    Topic[]
-  questions Question[]
-  exams     Exam[]
+  topics        Topic[]
+  questions     Question[]
+  exams         Exam[]
+  examStructure ExamStructure?
 
   createdAt DateTime @default(now())
+}
+
+// Cấu trúc đề cố định theo môn (THPT — 1 môn/đề): số câu theo từng dạng ×
+// mức độ khó, dùng làm khuôn mỗi khi AI ghép đề cho môn này, thay vì admin
+// phải tự gõ số lượng mỗi lần. Mỗi môn chỉ có đúng 1 cấu trúc tại một thời
+// điểm (subjectId unique) — sửa cấu trúc áp dụng cho mọi đề ghép sau đó.
+model ExamStructure {
+  id              String @id @default(cuid())
+  subjectId       String @unique
+  subject         Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  durationMinutes Int
+
+  items ExamStructureItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExamStructureItem {
+  id                  String          @id @default(cuid())
+  structureId         String
+  structure           ExamStructure   @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  type                QuestionType
+  difficulty          DifficultyLevel
+  questionCount       Int
+  maxScorePerQuestion Float
+  order               Int
+
+  @@index([structureId])
 }
 
 model Topic {

@@ -31,13 +31,13 @@ export interface GenerateExamSectionPayload {
 export interface GenerateExamPayload {
   title: string;
   category: ExamCategory;
-  durationMinutes: number;
-  // THPT
+  // Bỏ trống với THPT để dùng durationMinutes mặc định từ cấu trúc đề của
+  // môn; bắt buộc với ĐGNL.
+  durationMinutes?: number;
+  // THPT: số câu theo dạng × mức độ khó lấy từ cấu trúc đề cố định của môn
+  // (xem subjectsApi.fetchExamStructure/upsertExamStructure), không còn gửi
+  // số lượng thủ công ở đây.
   subjectId?: string;
-  multipleChoiceCount?: number;
-  trueFalseCount?: number;
-  shortAnswerCount?: number;
-  essayCount?: number;
   // ĐGNL
   sections?: GenerateExamSectionPayload[];
 }

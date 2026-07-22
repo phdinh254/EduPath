@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -11,6 +11,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { CreateTopicDto } from './dto/create-topic.dto';
+import { UpsertExamStructureDto } from './dto/upsert-exam-structure.dto';
 
 @ApiTags('subjects')
 @ApiBearerAuth()
@@ -72,5 +73,35 @@ export class SubjectsController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy môn học.' })
   createTopic(@Param('id') id: string, @Body() dto: CreateTopicDto) {
     return this.subjectsService.createTopic(id, dto);
+  }
+
+  @Get(':id/exam-structure')
+  @ApiOperation({
+    summary: 'Cấu trúc đề cố định của môn học (THPT)',
+    description:
+      'Mọi vai trò đã đăng nhập. Trả về null nếu môn chưa được cấu hình cấu trúc đề — khi đó AI ghép đề cho môn này sẽ báo lỗi.',
+  })
+  @ApiParam({ name: 'id', description: 'ID môn học' })
+  @ApiResponse({ status: 200, description: 'Cấu trúc đề hoặc null.' })
+  getExamStructure(@Param('id') id: string) {
+    return this.subjectsService.getExamStructure(id);
+  }
+
+  @Roles(Role.ADMIN)
+  @Put(':id/exam-structure')
+  @ApiOperation({
+    summary: 'Khai báo/cập nhật cấu trúc đề cố định của môn học',
+    description:
+      'Chỉ ADMIN. Thay thế toàn bộ cấu trúc cũ (nếu có) bằng danh sách item mới (dạng câu × mức độ khó × số câu × điểm/câu). Áp dụng cho mọi lần AI ghép đề sau đó của môn này.',
+  })
+  @ApiParam({ name: 'id', description: 'ID môn học' })
+  @ApiResponse({ status: 201, description: 'Đã lưu cấu trúc đề.' })
+  @ApiResponse({ status: 403, description: 'Không phải ADMIN.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy môn học.' })
+  upsertExamStructure(
+    @Param('id') id: string,
+    @Body() dto: UpsertExamStructureDto,
+  ) {
+    return this.subjectsService.upsertExamStructure(id, dto);
   }
 }

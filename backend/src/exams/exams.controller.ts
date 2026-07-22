@@ -39,7 +39,7 @@ export class ExamsController {
   @ApiOperation({
     summary: 'AI tự động ghép đề hoàn chỉnh',
     description:
-      'Chỉ ADMIN. category=THPT: 1 môn, trắc nghiệm 3 dạng hoặc tự luận Văn. category=DGNL: nhiều section theo môn, tổng thang điểm 150. Câu hỏi lấy từ kho đã duyệt, AI sinh bù ngay nếu thiếu.',
+      'Chỉ ADMIN. category=THPT: 1 môn, số câu theo dạng × mức độ khó lấy từ cấu trúc đề cố định của môn (xem PUT /subjects/:id/exam-structure) — môn chưa cấu hình sẽ báo lỗi. category=DGNL: nhiều section theo môn, tổng thang điểm 150. Câu hỏi lấy từ kho đã duyệt, AI sinh bù ngay nếu thiếu.',
   })
   @ApiResponse({ status: 201, description: 'Đã sinh đề thi hoàn chỉnh.' })
   generate(@CurrentUser() user: JwtPayload, @Body() dto: GenerateExamDto) {

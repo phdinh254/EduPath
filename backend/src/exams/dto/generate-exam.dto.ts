@@ -35,35 +35,18 @@ export class GenerateExamDto {
   @IsEnum(ExamCategory)
   category: ExamCategory;
 
+  // Bỏ trống để dùng durationMinutes mặc định từ cấu trúc đề của môn (THPT).
+  // Bắt buộc với ĐGNL vì không gắn với cấu trúc theo môn.
+  @IsOptional()
   @IsInt()
   @Min(1)
-  durationMinutes: number;
+  durationMinutes?: number;
 
-  // --- THPT: 1 môn/đề ---
+  // --- THPT: 1 môn/đề, số câu theo dạng × mức độ khó lấy từ ExamStructure
+  // đã cấu hình sẵn cho môn (xem SubjectsService.upsertExamStructure) ---
   @IsOptional()
   @IsString()
   subjectId?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  multipleChoiceCount?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  trueFalseCount?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  shortAnswerCount?: number;
-
-  // Môn Ngữ văn: chỉ sinh câu tự luận (Đọc hiểu + Viết), không trộn với trắc nghiệm.
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  essayCount?: number;
 
   // --- ĐGNL: nhiều môn/section, tổng thang điểm 150 ---
   @IsOptional()
