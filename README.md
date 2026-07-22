@@ -1,148 +1,133 @@
 # EduPath
 
-Hệ thống web luyện thi thử dành cho học sinh lớp 12 chuẩn bị kỳ thi tốt nghiệp THPT. Học sinh làm đề, luyện theo chuyên đề, xem kết quả và nhận lộ trình ôn tập cá nhân hóa. Giáo viên/trung tâm tạo lớp, quản lý học sinh, biên soạn đề riêng. Quản trị viên quản lý ngân hàng câu hỏi dùng chung và toàn hệ thống.
+![CI](https://github.com/phdinh254/EduPath/actions/workflows/ci.yml/badge.svg)
 
-Mô tả nghiệp vụ đầy đủ: [docs/PROJECT.md](docs/PROJECT.md).
+**Nền tảng luyện thi THPT quốc gia & Đánh giá năng lực (ĐGNL) dùng AI** — học sinh tự chọn đề, làm bài, và nhận điểm cùng nhận xét ngay lập tức, không cần chờ ai chấm hay tham gia lớp học nào.
 
-> **Trạng thái:** dự án đang phát triển (MVP). Phần "Giới hạn hiện tại" ở cuối file liệt kê rõ những gì chưa hoàn thiện hoặc còn là placeholder — đọc trước khi coi bất kỳ tính năng nào là sản phẩm hoàn chỉnh.
+Mô tả nghiệp vụ và kỹ thuật đầy đủ: [docs/PROJECT.md](docs/PROJECT.md).
 
-## Kiến trúc
+## Giới thiệu
+
+EduPath giải quyết một vấn đề cụ thể: học sinh lớp 12 ôn thi thường phải chờ đợi — chờ giáo viên chấm bài tự luận, chờ có đủ người mở lớp, chờ biết mình đang yếu ở đâu. EduPath bỏ qua toàn bộ những khâu chờ đợi đó bằng cách để AI (Google Gemini) đảm nhiệm việc chấm điểm, sinh đề, giải thích lỗi sai và tư vấn lộ trình ôn tập — tất cả diễn ra trong vài giây ngay sau khi học sinh nộp bài.
+
+Đây là mô hình **B2C tự phục vụ**: không có giáo viên, lớp học hay trung tâm trong hệ thống. Học sinh tự đăng ký (email hoặc Google), tự chọn đề THPT hoặc ĐGNL để luyện, và tự quản lý lộ trình ôn tập của mình.
+
+## Tính năng chính
+
+### Dành cho học sinh
+
+- Đăng ký / đăng nhập bằng email hoặc **tài khoản Google thật** (OAuth2).
+- Duyệt và làm bất kỳ đề thi nào đã có trong hệ thống — không cần mã lớp, không cần chờ giáo viên giao đề.
+- **Chấm điểm tức thời** ngay sau khi nộp bài, kể cả bài tự luận Ngữ văn — AI đọc đúng nội dung bài làm để chấm, không phải đếm số từ.
+- Với câu trắc nghiệm/đúng-sai/trả lời ngắn bị sai: bấm một nút để AI giải thích chính xác vì sao sai và đáp án đúng là gì.
+- Nhận phân tích điểm yếu theo từng chuyên đề sau mỗi lần làm bài, kèm lộ trình ôn tập 4 giai đoạn và **lời khuyên cụ thể do AI viết riêng** cho từng chuyên đề yếu.
+
+### Dành cho quản trị viên
+
+- Tạo câu hỏi/đề thi thủ công, hoặc để **AI tự soạn nội dung mới** (không sao chép đề thi thật) và tự động ghép thành đề hoàn chỉnh chỉ với vài tham số.
+- Duyệt hoặc từ chối (kèm lý do) nội dung do AI đề xuất trước khi vào kho câu hỏi dùng chung.
+- Hậu kiểm — điều chỉnh lại điểm AI đã chấm cho bài tự luận nếu cần, không chặn việc học sinh đã xem điểm trước đó.
+- Quản lý người dùng, môn học/chuyên đề, xem thống kê hệ thống và nhật ký hoạt động (audit log).
+
+### Hai kỳ thi, một nền tảng
+
+| Kỳ thi | Cấu trúc |
+|---|---|
+| **THPT quốc gia** | 1 môn/đề. Trắc nghiệm 3 dạng (nhiều lựa chọn, đúng/sai lũy tiến, trả lời ngắn) hoặc tự luận Ngữ văn (Đọc hiểu + Viết). |
+| **Đánh giá năng lực (ĐGNL)** | Nhiều phần thi (section) theo môn khác nhau trong cùng một đề, tổng thang điểm 150. |
+
+### AI thật, có lối thoát an toàn
+
+Bốn tính năng dùng **Google Gemini API thật**: chấm tự luận Văn, sinh câu hỏi mới, giải thích câu sai, viết lời khuyên ôn tập. Mỗi tính năng đều tự động rơi về logic rule-based có sẵn nếu chưa cấu hình `GEMINI_API_KEY` hoặc Gemini gặp sự cố (quota, mạng, phản hồi sai định dạng) — một API bên ngoài gặp sự cố không làm gián đoạn việc nộp bài hay ghép đề của học sinh.
+
+## Kiến trúc & công nghệ
 
 ```
 frontend/   React 19 + TypeScript + Vite + Tailwind CSS v4 + React Router + TanStack Query
-backend/    NestJS + TypeScript + Prisma ORM + PostgreSQL + Passport JWT
+backend/    NestJS + TypeScript + Prisma ORM + PostgreSQL + Passport (JWT + Google OAuth2)
 devops/     Docker Compose cho môi trường dev (postgres + backend + frontend)
-docs/       Đặc tả nghiệp vụ
+docs/       Đặc tả nghiệp vụ và kỹ thuật chi tiết
 ```
 
-Không có AI service riêng biệt (Python/FastAPI) — toàn bộ logic "AI cá nhân hoá" hiện chạy ngay trong NestJS backend dưới dạng rule-based (xem mục AI bên dưới), chưa gọi LLM thật.
-
-Backend không có global prefix `/api` — route nằm ở gốc (`/auth/login`, `/classes`, ...). Frontend dev server tự thêm prefix `/api` và Vite proxy rewrite bỏ nó đi trước khi chuyển tiếp tới backend (xem `frontend/vite.config.ts`).
-
-## Vai trò và mô hình B2B2C
-
-| Vai trò | Quyền hạn chính |
+| Lớp | Công nghệ |
 |---|---|
-| Học sinh (STUDENT) | Làm đề, luyện chuyên đề, xem lời giải sau khi nộp bài, xem điểm yếu và lộ trình AI của chính mình |
-| Giáo viên (TEACHER) | Tạo lớp (riêng tư hoặc công khai), mời học sinh, tạo câu hỏi/đề riêng trong tenant của mình, duyệt điểm Văn do AI chấm |
-| Quản trị viên (ADMIN) | Quản lý người dùng, tenant, môn học/chuyên đề, ngân hàng câu hỏi dùng chung, duyệt câu hỏi giáo viên đề xuất, xem thống kê và audit log |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, React Router v7, TanStack Query, Axios |
+| Backend | NestJS 11, TypeScript, Prisma ORM (`@prisma/adapter-pg`), PostgreSQL, Passport (JWT + Google OAuth2), Argon2, class-validator/class-transformer, Swagger/OpenAPI |
+| AI | Google Gemini API (`@google/generative-ai`) |
+| Test | Jest + Supertest (backend, e2e chạy trên PostgreSQL thật), Vitest + Testing Library (frontend) |
+| DevOps | Docker, Docker Compose, GitHub Actions CI |
 
-Mô hình tự phục vụ: giáo viên/trung tâm đăng ký (`role=TEACHER` + `tenantName`) sẽ tự động được tạo một **Tenant** riêng — toàn bộ lớp, câu hỏi, đề thi họ tạo đều gắn với tenant đó và tách biệt với tenant khác (kiểm tra RBAC + tenant scoping ở backend, không chỉ ở giao diện). Học sinh có thể tự đăng ký độc lập, không bắt buộc thuộc lớp nào, và có thể thuộc nhiều lớp/tenant cùng lúc.
+Vai trò hệ thống chỉ còn hai: **STUDENT** (tự phục vụ, chỉ thấy dữ liệu của chính mình) và **ADMIN** (toàn quyền quản lý nội dung và hệ thống) — không có giáo viên/lớp học/trung tâm.
 
-### Lớp công khai và lớp riêng tư
+## Bắt đầu nhanh
 
-- Mặc định lớp là **riêng tư**: học sinh chỉ tham gia được bằng mã mời (`inviteCode`), qua `POST /classes/join`.
-- Giáo viên có thể bật `isPublic: true` khi tạo hoặc sửa lớp. Lớp công khai xuất hiện trong `GET /classes/public` để bất kỳ học sinh nào cũng có thể duyệt và tham gia bằng một lượt gọi `POST /classes/:id/join-public`, không cần biết mã mời.
-- Tắt `isPublic` hoặc xoá lớp sẽ khiến lớp biến mất khỏi danh sách công khai ngay lập tức.
-- Giáo viên tenant khác không thể sửa, tắt công khai, hay xoá lớp không thuộc tenant của mình (đã có test bảo mật riêng, xem mục Test).
-
-## Xác thực và refresh token
-
-- Đăng ký/đăng nhập trả về cặp `accessToken` (15 phút) và `refreshToken` (7 ngày), ký JWT riêng biệt bằng hai secret khác nhau.
-- Refresh token được lưu **hash SHA-256** (không lưu plaintext) trong bảng `RefreshToken`, kèm thời điểm hết hạn.
-- `POST /auth/refresh`: xoay vòng (rotate) — token cũ bị thu hồi ngay khi dùng bằng một câu `UPDATE` nguyên tử có điều kiện (không phải đọc-rồi-ghi), nên hai request refresh đồng thời dùng chung một token không thể cả hai đều thành công. Mỗi refresh token có thêm `jti` ngẫu nhiên để đảm bảo duy nhất kể cả khi cấp trong cùng một giây.
-- `POST /auth/logout`: thu hồi refresh token được cung cấp (best-effort, không lỗi nếu token không còn tồn tại).
-- Frontend: `api-client.ts` tự động bắt lỗi 401, gọi `/auth/refresh` một lần (gộp các request 401 đồng thời thành một lần refresh duy nhất), rồi thử lại request gốc. Nếu refresh thất bại, xoá toàn bộ token cục bộ và chuyển hướng về `/login`.
-
-## Luồng chấm điểm và AI cá nhân hoá — **rule-based, chưa phải AI thật**
-
-Đây là phần quan trọng cần hiểu đúng trước khi trình bày dự án:
-
-- **Trắc nghiệm nhiều lựa chọn, đúng/sai, trả lời ngắn**: chấm tự động bằng logic so sánh trực tiếp (không dùng AI). Đúng/sai áp dụng đúng thang điểm lũy tiến của đề thi THPT 2025 (1 ý đúng = 0.1, 2 ý = 0.25, 3 ý = 0.5, 4 ý = 1.0 × điểm câu).
-- **Tự luận (Ngữ văn)**: điểm "AI chấm sơ bộ" hiện là **một hàm heuristic dựa trên số từ** trong bài làm (`backend/src/grading/grading.utils.ts::gradeEssayPlaceholder`) — **không gọi LLM/API AI thật nào**. Đây là placeholder được đánh dấu rõ trong code, dự định thay bằng lời gọi mô hình ngôn ngữ thật sau này.
-  - Nếu đề không gắn lớp học nào (học sinh tự học): điểm AI được công bố ngay, `isAiReferenceOnly=true`, và cần hiển thị rõ nhãn **"Điểm AI tham khảo, chưa được giáo viên duyệt."**
-  - Nếu đề gắn với một lớp học: điểm giữ ở trạng thái chờ (`scoreAwarded=null`), giáo viên phải vào `POST /grading/answers/:answerId/review` để nhập điểm chính thức trước khi công bố.
-- **Phân tích điểm yếu và lộ trình ôn tập**: cũng là **rule-based**, không gọi AI thật. Sau khi một lượt làm bài được chấm xong hoàn toàn, hệ thống tính tỷ lệ đúng theo từng chuyên đề; chuyên đề có tỷ lệ đúng dưới 50% bị coi là điểm yếu, và một lộ trình cố định 4 giai đoạn (ôn lý thuyết → làm cơ bản → luyện vận dụng → kiểm tra lại) được tạo cho mỗi chuyên đề yếu (`backend/src/roadmap/roadmap.service.ts`).
-
-## Chạy local (không dùng Docker)
-
-Yêu cầu: Node.js 22, Docker (chỉ để chạy Postgres) hoặc Postgres cài sẵn.
+Yêu cầu: Node.js 22+, Docker (chạy PostgreSQL).
 
 ```bash
-# 1. Khởi động Postgres (dùng Docker Compose chỉ cho service này)
-cd devops
-docker compose up -d postgres
+# 1. PostgreSQL
+cd devops && docker compose up -d postgres
 
 # 2. Backend
 cd ../backend
-cp .env.example .env        # sửa secret nếu cần
-npm install                 # postinstall tự chạy `prisma generate`
-npx prisma migrate dev      # tạo schema (lần đầu) — xem mục Migration bên dưới
-npm run start:dev           # http://localhost:3000, Swagger: http://localhost:3000/api-docs
+cp .env.example .env      # điền secret; GOOGLE_*/GEMINI_API_KEY nếu muốn đăng nhập Google/AI thật
+npm install                # postinstall tự chạy `prisma generate`
+npx prisma migrate deploy
+npm run start:dev          # http://localhost:3000 — Swagger: http://localhost:3000/api-docs
 
 # 3. Frontend (terminal khác)
 cd ../frontend
 npm install
-npm run dev                 # http://localhost:5173, proxy /api -> http://localhost:3000
+npm run dev                 # http://localhost:5173
 ```
 
-## Chạy bằng Docker Compose (toàn bộ hệ thống)
+Hoặc chạy toàn bộ bằng một lệnh:
 
 ```bash
-cd devops
-docker compose up --build
+cd devops && docker compose up --build
 ```
 
-Một lệnh duy nhất khởi động cả 3 service: `postgres` (có healthcheck), `backend` (chỉ start sau khi postgres healthy, có healthcheck riêng), `frontend` (chỉ start sau khi backend healthy). Frontend chạy ở chế độ dev server bên trong container, proxy `/api` trỏ vào `http://backend:3000` (tên service trong mạng Compose, **không phải** `localhost`).
+### Biến môi trường chính (`backend/.env`)
 
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3000
-- Swagger: http://localhost:3000/api-docs
-- Postgres: localhost:5432 (user/pass/db: `edupath`/`edupath`/`edupath`)
+| Biến | Bắt buộc | Mô tả |
+|---|---|---|
+| `DATABASE_URL` | ✅ | Chuỗi kết nối PostgreSQL |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | ✅ | Secret ký JWT |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | Tuỳ chọn | Đăng nhập bằng Google — lấy tại [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Thiếu thì `/auth/google` trả lỗi 503 rõ ràng thay vì crash server |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Tuỳ chọn | AI thật cho chấm Văn/sinh câu hỏi/giải thích/lời khuyên — lấy tại [Google AI Studio](https://aistudio.google.com/apikey). Thiếu thì hệ thống tự dùng logic rule-based có sẵn |
+| `FRONTEND_URL` | Khi dùng Google login | URL frontend để redirect về sau khi đăng nhập Google |
 
-Đã verify thực tế: build cả hai image thành công, cả 3 container lên `healthy`/`running`, đăng ký tài khoản qua cổng frontend (5173, đi qua proxy tới container backend) và chạy trọn một luồng đề thi (tạo đề → gán câu hỏi → học sinh làm bài → nộp → chấm điểm `GRADED`) qua container backend (3000) — không cần chạy gì trên máy host ngoài Docker.
+Xem đầy đủ tại `backend/.env.example`.
 
-`.env` không được build vào image (`.dockerignore` loại trừ ở cả hai project) — biến môi trường được truyền qua `env_file`/`environment` trong `docker-compose.yml` tại thời điểm chạy container.
-
-## Migration (Prisma)
+## Kiểm thử
 
 ```bash
+# Backend
 cd backend
-npx prisma migrate dev --name <tên_migration>   # tạo + áp dụng migration mới khi sửa schema.prisma
-npx prisma migrate deploy                       # áp dụng migration có sẵn (CI, production) - không tạo migration mới
-npx prisma migrate status                       # kiểm tra drift
-```
-
-Đã verify: chạy `prisma migrate deploy` trên một database hoàn toàn sạch (tạo riêng, không phải database dev) áp dụng đúng cả 2 migration hiện có, tạo đúng cột `Class.isPublic` và bảng `RefreshToken`, `migrate status` báo "up to date", không phụ thuộc dữ liệu test nào từ trước. Database dev đang dùng không còn dữ liệu test sót lại (đã kiểm tra count = 0 mọi bảng chính).
-
-## Test
-
-```bash
-# Backend (cần Postgres đang chạy — devops: docker compose up -d postgres)
-cd backend
-npx eslint "{src,apps,libs,test}/**/*.ts"   # lint (CI chạy không kèm --fix)
-npx tsc --noEmit -p tsconfig.json           # typecheck
-npm run build                               # build
-npm run test                                # unit test
-npm run test:e2e                            # e2e test (4 file, 20 test case) — cần Postgres
+npx eslint "{src,apps,libs,test}/**/*.ts"
+npx tsc --noEmit -p tsconfig.json
+npm run test          # unit test
+npm run test:e2e      # e2e test — cần PostgreSQL đang chạy
 
 # Frontend
 cd frontend
 npm run lint
 npx tsc -b
-npm run test                                # vitest, 14 test case
-npm run build
+npm run test
 ```
 
-Bộ e2e test backend (`backend/test/*.e2e-spec.ts`) chạy trực tiếp trên Postgres thật (không mock DB), bao gồm:
-- `flows.e2e-spec.ts`: đăng ký/đăng nhập theo vai trò, tạo lớp, tham gia bằng mã mời, vòng đời làm bài đầy đủ, ẩn `correctAnswer` khi đang làm bài, chặn học sinh ngoài lớp, chặn giáo viên khác tenant, duyệt điểm Văn, nhãn điểm AI tham khảo, roadmap sau khi chấm, chặn route theo vai trò.
-- `public-classes.e2e-spec.ts`: lọc đúng lớp công khai, chặn tham gia trùng lặp, chặn truy cập không xác thực, chặn giáo viên tenant khác sửa/tắt/xoá lớp, lớp biến mất khỏi danh sách khi tắt công khai/xoá.
-- `refresh-token.e2e-spec.ts`: refresh hợp lệ, chặn token đã xoay vòng, `jti` duy nhất dù cùng giây, chặn token hết hạn, chặn token không có bản ghi tương ứng, logout thu hồi đúng token, refresh đồng thời không nhân bản token (test này từng phát hiện một race condition thật, đã sửa bằng UPDATE nguyên tử có điều kiện).
+CI (`.github/workflows/ci.yml`) chạy toàn bộ danh sách trên cho cả hai project trên mỗi push/PR vào `main`.
 
-Frontend test (`vitest` + Testing Library): route guard theo vai trò, luồng tạo lớp của giáo viên, luồng duyệt/từ chối câu hỏi của admin, và interceptor 401 (gộp refresh đồng thời thành một lần gọi, không lặp vô hạn khi refresh xong vẫn còn 401, đăng xuất ngay khi không có refresh token).
+## API docs
 
-CI (`.github/workflows/ci.yml`) chạy toàn bộ danh sách trên cho cả backend và frontend trên mỗi push/PR vào `main`.
-
-## Swagger / OpenAPI
-
-http://localhost:3000/api-docs (chạy backend rồi mở, hoặc `/api-docs-json` để lấy spec JSON thô).
-
-Đã audit toàn bộ 10 module (auth, users, classes, subjects, questions, exams, grading, roadmap, admin) — mỗi endpoint có `@ApiOperation` (mô tả kèm vai trò/tenant scoping bắt buộc), `@ApiResponse` cho mã thành công và các mã lỗi thực sự có thể xảy ra, `@ApiParam`/`@ApiQuery` cho tham số, và `@ApiBearerAuth` trên mọi controller trừ các endpoint công khai của auth. Đã kiểm tra bằng script đối chiếu spec JSON thực tế (không chỉ đọc code): toàn bộ 47 operation (trên 39 đường dẫn) đều có `summary` + `responses`, mọi operation cần xác thực đều yêu cầu bearer token và không endpoint công khai nào bị yêu cầu nhầm.
+Swagger UI: `http://localhost:3000/api-docs` sau khi chạy backend.
 
 ## Giới hạn hiện tại
 
-- **Chấm tự luận và roadmap AI là rule-based/placeholder**, chưa gọi LLM thật (xem mục AI ở trên) — đừng trình bày đây là "AI thật" trước nhà tuyển dụng/giám khảo mà không giải thích rõ.
-- Không có khu vực dành cho phụ huynh; chưa rà soát pháp lý đầy đủ theo Nghị định 13/2023/NĐ-CP dù kiến trúc đã tách bạch dữ liệu theo vai trò.
-- Frontend chưa có bản build "production" thực sự phục vụ qua Nginx với reverse proxy `/api` — Dockerfile có stage `production` cho backend (đã sửa lỗi build) nhưng stage `production` của frontend (Nginx serve static) chưa có cấu hình proxy API, nên hiện chỉ dùng được stage `dev` (đã là stage mà `docker-compose.yml` sử dụng).
-- Danh sách/audit log, người dùng, tenant chưa có UI phân trang phía frontend dù backend `admin/audit-logs` đã hỗ trợ `skip`/`take`.
-- Refresh token hiện không hỗ trợ "đăng xuất tất cả thiết bị" (chỉ thu hồi đúng token được cung cấp khi logout).
+- Chưa có tính năng đặt lại mật khẩu thật (link "Quên mật khẩu?" hiện chỉ hiển thị thông báo tính năng đang phát triển).
+- Cấu trúc đề ĐGNL (3 phần thi, thang điểm 150) là cấu hình mặc định tham khảo — admin tự khai báo section/thang điểm khi ghép đề, chưa cố định theo đề thi thật của một đại học cụ thể.
+- Chưa rà soát pháp lý đầy đủ theo Nghị định 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân trẻ em.
+- Frontend chưa có cấu hình production serve qua Nginx với reverse proxy `/api`.
+
+## Giấy phép
+
+Dự án cá nhân/học tập, hiện chưa gắn giấy phép mã nguồn mở chính thức.

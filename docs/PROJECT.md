@@ -1,90 +1,139 @@
-# EduPath
+# EduPath — Đặc tả nghiệp vụ & kỹ thuật
 
-**EduPath** là hệ thống web luyện thi thử dành cho học sinh lớp 12 đang chuẩn bị cho kỳ thi tốt nghiệp THPT. Hệ thống giúp học sinh làm đề, luyện tập theo từng chuyên đề, theo dõi kết quả và nhận lộ trình ôn tập cá nhân hóa dựa trên trí tuệ nhân tạo.
+Tài liệu này mô tả chi tiết nghiệp vụ và kiến trúc kỹ thuật hiện tại của EduPath. Giới thiệu tổng quan xem tại [README.md](../README.md).
 
-## Mục tiêu dự án
+## Bài toán và mục tiêu
 
-Dự án hướng đến việc xây dựng một nền tảng học tập thông minh, giúp học sinh nhận biết chính xác những phần kiến thức còn yếu thay vì chỉ xem điểm số tổng quát. Sau mỗi lần làm bài, hệ thống sẽ phân tích kết quả, xác định chuyên đề học sinh thường mắc lỗi và đề xuất nội dung cần ôn tập tiếp theo.
+Học sinh lớp 12 ôn thi THPT quốc gia và luyện thi Đánh giá năng lực (ĐGNL) thường phải chờ đợi: chờ giáo viên chấm bài tự luận, chờ đủ người mở lớp, chờ biết mình đang yếu ở đâu để ôn đúng trọng tâm. EduPath loại bỏ các khâu chờ đợi này bằng cách để AI (Google Gemini) đảm nhiệm chấm điểm, sinh đề, giải thích lỗi sai và tư vấn lộ trình — toàn bộ diễn ra trong vài giây ngay sau khi học sinh nộp bài.
 
-Giáo viên và trung tâm có thể sử dụng hệ thống để tạo lớp học, quản lý học sinh, xây dựng đề thi riêng, theo dõi tiến độ và hỗ trợ học sinh cải thiện năng lực.
+## Mô hình vận hành: B2C tự phục vụ
+
+EduPath là nền tảng **B2C thuần túy** — không có khái niệm giáo viên, lớp học hay trung tâm (tenant) trong hệ thống. Học sinh tự đăng ký (email/mật khẩu hoặc Google OAuth) và có thể làm bất kỳ đề thi nào đã được ADMIN công bố, không cần gia nhập lớp hay được ai giao đề trước.
+
+Toàn bộ nội dung (câu hỏi, đề thi) do ADMIN quản lý tập trung: tạo thủ công hoặc để AI tự soạn, sau đó ADMIN duyệt trước khi đưa vào kho dùng chung.
 
 ## Đối tượng sử dụng
 
-| Đối tượng | Mục đích sử dụng |
+| Vai trò | Mục đích sử dụng |
 |---|---|
-| Học sinh | Làm đề, luyện chuyên đề, xem điểm, nhận phân tích năng lực và lộ trình học cá nhân |
-| Giáo viên hoặc trung tâm | Quản lý lớp, mời học sinh, tạo đề riêng, theo dõi kết quả và duyệt điểm tự luận |
-| Quản trị viên | Quản lý toàn bộ tài khoản, nội dung, ngân hàng câu hỏi và hoạt động hệ thống |
+| **STUDENT** | Tự đăng ký, chọn đề THPT hoặc ĐGNL để làm, xem điểm/lời giải/giải thích câu sai ngay lập tức, nhận phân tích điểm yếu và lộ trình ôn tập cá nhân hoá |
+| **ADMIN** | Quản lý toàn bộ tài khoản, môn học/chuyên đề, đề thi, ngân hàng câu hỏi (tạo thủ công hoặc duyệt nội dung AI sinh), điều chỉnh điểm AI chấm nếu cần, xem thống kê và nhật ký hoạt động hệ thống |
 
-Hệ thống áp dụng mô hình B2B2C tự phục vụ. Giáo viên hoặc trung tâm có thể tự đăng ký, tạo lớp và mời học sinh bằng mã lớp hoặc liên kết mời. Học sinh cũng có thể tự đăng ký để sử dụng hệ thống mà không cần thuộc lớp nào.
+Không còn vai trò TEACHER; các model `Tenant`, `Class`, `StudentClass` đã bị loại bỏ hoàn toàn khỏi schema.
 
-Một học sinh có thể thuộc nhiều lớp hoặc nhiều trung tâm khác nhau cùng lúc, hoặc chuyển lớp giữa năm học. Vì vậy, quan hệ giữa học sinh và lớp/trung tâm được thiết kế theo dạng **nhiều-nhiều**, không phải một học sinh chỉ gắn cố định với một lớp duy nhất.
+## Hai kỳ thi trên cùng một nền tảng
 
-## Chức năng chính
+Hệ thống được thiết kế để hai luồng nghiệp vụ phát triển song song, dùng chung phần lớn hạ tầng (chấm điểm, roadmap, AI):
 
-Học sinh có thể đăng ký, đăng nhập, làm bài thi thử theo môn, luyện tập theo chuyên đề và mức độ khó, làm bài trong thời gian quy định, nộp bài và nhận kết quả. Hệ thống lưu lại lịch sử làm bài, điểm số, thời gian hoàn thành, câu trả lời đúng sai và các nội dung cần cải thiện.
+| Kỳ thi | `ExamCategory` | Cấu trúc |
+|---|---|---|
+| **THPT quốc gia** | `THPT` | Một môn/đề (`Exam.subjectId` bắt buộc). Trắc nghiệm gồm 3 dạng câu (nhiều lựa chọn, đúng/sai lũy tiến theo số ý đúng, trả lời ngắn), hoặc tự luận Ngữ văn (Đọc hiểu + Viết). |
+| **Đánh giá năng lực (ĐGNL)** | `DGNL` | Nhiều phần thi (`ExamSection`) thuộc các môn khác nhau trong cùng một đề (`Exam.subjectId` để trống); mỗi câu hỏi gắn với một `ExamSection` qua `ExamQuestion.sectionId`. Cấu trúc phần thi/thang điểm do ADMIN tự khai báo khi ghép đề, không cố định theo đề thi thật của một đại học cụ thể. |
 
-Đề thi bám sát cấu trúc đề thi tốt nghiệp THPT áp dụng từ năm 2025. Với các môn thi trắc nghiệm, đề gồm ba dạng câu hỏi:
-- Trắc nghiệm nhiều lựa chọn (chấm 0,25 điểm/câu)
-- Dạng đúng/sai với thang điểm lũy tiến theo số ý đúng
-- Dạng trắc nghiệm trả lời ngắn
+## Ngân hàng câu hỏi và AI sinh nội dung
 
-Riêng môn Ngữ văn thi theo hình thức tự luận gồm hai phần Đọc hiểu và Viết, không áp dụng cách chấm tự động mà xử lý qua luồng chấm bài tự luận riêng (AI). Hệ thống chấm điểm cần xử lý đúng cả ba dạng câu hỏi trắc nghiệm nói trên, không chỉ dạng một đáp án đúng truyền thống.
+Không còn luồng giáo viên tự soạn câu hỏi/đề thi. Nội dung vào kho dùng chung theo hai cách:
 
-Giáo viên có thể tạo lớp học, mời hoặc xóa học sinh trong lớp, tạo câu hỏi và đề thi riêng, xem kết quả của học sinh thuộc lớp mình, theo dõi tiến độ học tập và đưa ra nhận xét. Các câu hỏi do giáo viên tạo chỉ thuộc phạm vi lớp hoặc trung tâm của giáo viên đó, không ảnh hưởng đến ngân hàng câu hỏi dùng chung.
+1. **ADMIN tạo thủ công** — vào thẳng trạng thái `APPROVED`.
+2. **AI tự sinh** (`POST /questions/generate`) — Gemini soạn nội dung hoàn toàn mới theo chuyên đề, mức độ và dạng câu được chỉ định, tuyệt đối không sao chép nguyên văn đề thi chính thức của Bộ GD&ĐT hay tài liệu bản quyền của bên thứ ba. Kết quả vào trạng thái `PENDING_APPROVAL`, chờ ADMIN duyệt hoặc từ chối (kèm lý do, ghi vào `AuditLog`) trước khi vào kho dùng chung.
 
-Quản trị viên có quyền quản lý tài khoản, môn học, chuyên đề, đề thi và ngân hàng câu hỏi gốc. Giáo viên có thể đề xuất câu hỏi chất lượng đưa vào kho dùng chung, nhưng nội dung phải được quản trị viên kiểm tra và phê duyệt trước khi sử dụng toàn hệ thống. Nội dung đề xuất phải do giáo viên tự biên soạn, không được sao chép nguyên văn đề thi chính thức của Bộ Giáo dục và Đào tạo hoặc tài liệu có bản quyền của bên thứ ba; đây là tiêu chí bắt buộc trong bước phê duyệt.
+Khi ghép đề tự động (ĐGNL hoặc sinh hàng loạt câu hỏi cho một chuyên đề), nếu kho chưa đủ câu hỏi đã duyệt, hệ thống có thể tự động sinh bù bằng AI. Nếu `GEMINI_API_KEY` chưa cấu hình hoặc Gemini gặp sự cố, hệ thống rơi về bộ sinh câu hỏi rule-based/templated có sẵn (xem `backend/src/questions/ai-question.generator.ts`) — không chặn luồng ghép đề.
 
-## Chức năng AI cá nhân hóa
+## Chấm điểm
 
-Sau mỗi bài thi, AI sẽ phân tích tỷ lệ đúng theo từng môn, chương, chuyên đề và mức độ câu hỏi. Hệ thống cũng có thể xem xét thời gian làm bài, dạng câu hỏi thường sai và kết quả qua nhiều lần kiểm tra để xác định điểm yếu thực sự của học sinh.
+Chấm điểm là **tức thời** cho mọi dạng câu hỏi, ngay sau khi học sinh nộp bài — không có bước chờ duyệt trước khi công bố điểm:
 
-Dựa trên kết quả phân tích, AI sẽ đề xuất các chủ đề cần ưu tiên, bài học nên ôn lại, bài tập phù hợp và lộ trình học theo từng giai đoạn. Lộ trình có thể được điều chỉnh sau mỗi lần học sinh làm bài mới.
+- **Trắc nghiệm nhiều lựa chọn**: 0,25 điểm/câu, so khớp `correctAnswer.index`.
+- **Đúng/sai**: thang điểm lũy tiến theo số ý đúng trong 4 ý nhỏ (a–d).
+- **Trả lời ngắn**: so khớp giá trị đã chuẩn hoá.
+- **Tự luận Ngữ văn**: chấm bằng Gemini thật (đọc và đánh giá đúng nội dung bài làm, không đếm từ), trả điểm và nhận xét ngay. Nếu Gemini chưa cấu hình hoặc lỗi, hệ thống rơi về chấm rule-based đơn giản (`gradeEssayPlaceholder`) để không chặn việc nộp bài.
 
-Ví dụ, học sinh đạt 5,8 điểm và thường sai các câu về hàm số, nguyên hàm và xác suất. Hệ thống có thể xác định hàm số là nội dung cần ưu tiên, sau đó đề xuất ôn lý thuyết nền tảng, làm bài cơ bản, luyện bài vận dụng và kiểm tra lại sau một khoảng thời gian.
+Sau khi có điểm, ADMIN vẫn có thể hậu kiểm và điều chỉnh điểm tự luận qua `ScoreOverride` (đổi tên từ `TeacherReview` cũ) nếu phát hiện AI chấm sai — việc này không thu hồi điểm học sinh đã xem trước đó, chỉ cập nhật điểm chính thức.
 
-Đối với bài tự luận môn Ngữ văn, AI có thể hỗ trợ chấm và đưa ra nhận xét sơ bộ. Nếu học sinh thuộc lớp giáo viên, điểm AI sẽ được giáo viên duyệt hoặc điều chỉnh trước khi công bố chính thức. Nếu học sinh tự học, điểm AI được trả trực tiếp nhưng phải hiển thị rõ là **điểm tham khảo do AI đánh giá**.
+## Giải thích câu sai (AI, theo yêu cầu)
 
-## Phân quyền hệ thống
+Với câu trắc nghiệm/đúng-sai/trả lời ngắn bị sai (không áp dụng cho tự luận), học sinh có thể chủ động yêu cầu AI giải thích (`POST /grading/answers/:answerId/explain`). Kết quả được tính toán **lười** (chỉ khi được yêu cầu lần đầu) và lưu cache vào `Answer.aiExplanation` để các lần xem sau không gọi lại Gemini. Chỉ chủ sở hữu câu trả lời hoặc ADMIN mới được xem.
+
+## Phân tích điểm yếu và lộ trình ôn tập
+
+Sau mỗi lần nộp bài, hệ thống phân tích tỷ lệ đúng theo từng chuyên đề (`topicBreakdown`), xác định chuyên đề có tỷ lệ đúng dưới ngưỡng (< 50%) là điểm yếu — logic ngưỡng này vẫn thuần rule-based, không đổi.
+
+Vì đề ĐGNL có thể trải nhiều môn trong cùng một lượt làm bài, mỗi mục trong `topicBreakdown` mang theo `subjectId` riêng; việc nhóm điểm yếu theo môn dựa trên trường này thay vì `exam.subjectId` chung.
+
+Với mỗi chuyên đề yếu, hệ thống gọi Gemini (bất đồng bộ, không chặn việc trả kết quả bài thi) để viết lời khuyên ôn tập cụ thể, lưu vào `WeaknessAnalysis.details.adviceByTopic`. Nếu Gemini chưa cấu hình, lời khuyên AI đơn giản là không xuất hiện — phần phân tích điểm yếu rule-based vẫn hoạt động bình thường.
+
+## AI thật, có lối thoát an toàn (graceful fallback)
+
+Bốn tính năng dùng **Google Gemini API thật** qua `GeminiService` dùng chung (`backend/src/ai/gemini.service.ts`): chấm tự luận Văn, sinh câu hỏi mới, giải thích câu sai, viết lời khuyên ôn tập.
+
+Nguyên tắc thiết kế xuyên suốt: **một API bên ngoài gặp sự cố không bao giờ được làm gián đoạn nghiệp vụ cốt lõi** (nộp bài, ghép đề). Mỗi tính năng đều kiểm tra `GeminiService.isConfigured()` và bọc lời gọi thật trong try/catch, tự động rơi về logic rule-based/templated có sẵn nếu:
+- `GEMINI_API_KEY` chưa được cấu hình, hoặc
+- lời gọi Gemini thất bại (hết quota, lỗi mạng, phản hồi sai định dạng JSON).
+
+Tương tự, đăng nhập Google OAuth dùng `GoogleConfiguredGuard`: nếu `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` chưa cấu hình, endpoint `/auth/google` trả lỗi 503 rõ ràng thay vì làm crash toàn bộ server khi khởi động.
+
+## Phân quyền (RBAC)
 
 | Vai trò | Quyền hạn |
 |---|---|
-| Học sinh | Làm đề, luyện chuyên đề, xem lời giải, xem lịch sử, nhận phân tích điểm yếu và lộ trình AI của chính mình |
-| Giáo viên | Tạo lớp, mời học sinh, quản lý học sinh trong lớp, tạo và quản lý nội dung riêng, xem kết quả học sinh thuộc lớp, duyệt điểm Văn do AI chấm |
-| Quản trị viên | Quản lý tài khoản, giáo viên, trung tâm, môn học, đề thi, ngân hàng câu hỏi dùng chung, phê duyệt nội dung và xem thống kê toàn hệ thống |
+| STUDENT | Đăng ký/đăng nhập, làm bất kỳ đề thi nào, xem lời giải/lịch sử của chính mình, yêu cầu AI giải thích câu sai, xem phân tích điểm yếu và lộ trình ôn tập của chính mình |
+| ADMIN | Toàn quyền quản lý tài khoản, môn học/chuyên đề, đề thi, ngân hàng câu hỏi (tạo/duyệt/từ chối), hậu kiểm điểm tự luận, xem thống kê hệ thống và audit log |
 
-Học sinh chỉ được xem dữ liệu của bản thân. Giáo viên chỉ được xem dữ liệu của học sinh trong lớp mình. Các quyền này phải được kiểm tra ở backend bằng cơ chế xác thực JWT và phân quyền RBAC, không chỉ kiểm soát bằng giao diện frontend.
+Toàn bộ kiểm tra quyền được thực hiện ở backend bằng JWT (access 15 phút / refresh 7 ngày, xoay vòng refresh token khi dùng) và guard RBAC (`@Roles(...)`), không chỉ dựa vào việc ẩn/hiện ở giao diện.
+
+## Đăng ký tài khoản
+
+`POST /auth/register` luôn tạo tài khoản với `Role.STUDENT`, bất kể client gửi gì trong request — tài khoản ADMIN chỉ được tạo trực tiếp trong cơ sở dữ liệu. Đây là biện pháp chặn việc tự leo quyền qua API đăng ký công khai.
 
 ## Tuân thủ và bảo mật dữ liệu
 
-Phần lớn học sinh sử dụng hệ thống là học sinh lớp 12, dưới 18 tuổi. Việc thu thập, lưu trữ và xử lý dữ liệu của nhóm người dùng này cần tuân thủ quy định pháp luật Việt Nam về bảo vệ dữ liệu cá nhân, đặc biệt là các yêu cầu riêng đối với dữ liệu trẻ em theo Nghị định 13/2023/NĐ-CP. Trước khi ra mắt chính thức hoặc bổ sung các tính năng thu thập thêm dữ liệu (như tính năng dành cho phụ huynh), dự án nên được rà soát bởi người có chuyên môn pháp lý để đảm bảo tuân thủ đầy đủ.
+Phần lớn học sinh sử dụng hệ thống là học sinh lớp 12, dưới 18 tuổi. Việc thu thập, lưu trữ và xử lý dữ liệu của nhóm người dùng này cần tuân thủ quy định pháp luật Việt Nam về bảo vệ dữ liệu cá nhân, đặc biệt là các yêu cầu riêng đối với dữ liệu trẻ em theo Nghị định 13/2023/NĐ-CP. Hệ thống đã có cơ chế ẩn danh hoá dữ liệu học sinh ở một số điểm, nhưng **chưa được rà soát pháp lý đầy đủ** — cần chuyên gia pháp lý xem xét trước khi ra mắt chính thức hoặc bổ sung tính năng thu thập thêm dữ liệu.
 
 ## Kiến trúc kỹ thuật
 
-### Frontend
-React + TypeScript, Vite, Tailwind CSS, shadcn/ui, React Router, Axios, TanStack Query, React Hook Form + Zod, Recharts. Test: Vitest, React Testing Library, Playwright.
+```
+frontend/   React 19 + TypeScript + Vite + Tailwind CSS v4 + React Router v7 + TanStack Query + Axios
+backend/    NestJS 11 + TypeScript + Prisma ORM + PostgreSQL + Passport (JWT + Google OAuth2)
+devops/     Docker Compose cho môi trường dev (postgres + backend + frontend)
+docs/       Tài liệu này
+```
 
-### Backend
-NestJS + TypeScript, kiến trúc Module/Controller/Service/Repository, Prisma ORM, PostgreSQL, JWT + Passport, Argon2/bcrypt, class-validator/class-transformer, Swagger/OpenAPI. Test: Jest, Supertest.
+### Backend — cấu trúc module (`backend/src/`)
 
-### AI
-MVP: NestJS gọi trực tiếp LLM API để phân tích kết quả và tạo lộ trình. Khi cần mô hình phân tích riêng: tách AI Service bằng Python + FastAPI + Pandas + scikit-learn.
+`admin, ai, auth, exams, grading, prisma, questions, roadmap, subjects, users` — không còn module `classes`.
 
-### Cơ sở dữ liệu chính (PostgreSQL)
-`User`, `Role`, `Tenant`, `Class`, `StudentClass`, `Subject`, `Topic`, `Question`, `Exam`, `ExamAttempt`, `Answer`, `Score`, `WeaknessAnalysis`, `StudyRoadmap`, `TeacherReview`, `AuditLog`.
+- `ai/` — `GeminiService` dùng chung, wrap `@google/generative-ai`, expose `isConfigured()`, `generateText()`, `generateJson<T>()`.
+- `auth/` — JWT (access/refresh), Google OAuth2 (`GoogleStrategy` + `GoogleConfiguredGuard`), refresh token lưu dạng SHA-256 hash, xoay vòng qua `updateMany` có điều kiện để tránh race condition nhân bản token.
+- `exams/` — tạo/ghép đề THPT và ĐGNL, quản lý `ExamSection`, làm bài, nộp bài.
+- `grading/` — chấm điểm tức thời (3 dạng trắc nghiệm + tự luận qua Gemini), giải thích câu sai, hậu kiểm (`ScoreOverride`).
+- `questions/` — CRUD câu hỏi thủ công + AI sinh (`ai-question.generator.ts`), duyệt/từ chối.
+- `roadmap/` — phân tích điểm yếu theo chuyên đề (đa môn), lời khuyên AI bất đồng bộ.
+- `subjects/`, `users/`, `admin/` — quản lý môn học/chuyên đề, người dùng, thống kê hệ thống.
 
-Mỗi giáo viên/trung tâm được quản lý như một tenant riêng. Giáo viên chỉ truy cập lớp, học sinh, nội dung thuộc tenant của mình. Ngân hàng câu hỏi dùng chung thuộc quyền quản lý của quản trị viên.
+### Cơ sở dữ liệu chính (PostgreSQL, qua Prisma)
+
+`User` (Role: `STUDENT` | `ADMIN`), `Subject`, `Topic`, `Question`, `Exam`, `ExamSection`, `ExamQuestion`, `ExamAttempt`, `Answer`, `Score`, `WeaknessAnalysis`, `StudyRoadmap`, `ScoreOverride`, `AuditLog`, `RefreshToken`.
+
+Không còn `Tenant`, `Class`, `StudentClass` trong schema.
+
+### Công nghệ
+
+| Lớp | Công nghệ |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, React Router v7, TanStack Query, Axios |
+| Backend | NestJS 11, TypeScript, Prisma ORM (`@prisma/adapter-pg`), PostgreSQL, Passport (JWT + Google OAuth2), Argon2, class-validator/class-transformer, Swagger/OpenAPI |
+| AI | Google Gemini API (`@google/generative-ai`) |
+| Test | Jest + Supertest (backend, e2e chạy trên PostgreSQL thật, không mock DB), Vitest + Testing Library (frontend) |
+| DevOps | Docker, Docker Compose, GitHub Actions CI |
 
 ### DevOps
-Docker, Docker Compose, Nginx reverse proxy, Git/GitHub, GitHub Actions CI/CD, deploy VPS/Render/Railway/AWS, file storage S3-compatible.
 
-### Cấu trúc thư mục
-```
-frontend/
-backend/
-ai-service/
-devops/
-docs/
-```
+Docker Compose khởi động theo thứ tự có health-check: `postgres` → `backend` (nhận toàn bộ `.env` qua `env_file`, nên biến `GOOGLE_*`/`GEMINI_*` mới không cần sửa `docker-compose.yml`) → `frontend`. Chưa có cấu hình Nginx reverse proxy cho môi trường production.
 
-Phiên bản đầu tiên chưa cần tách microservice — một backend NestJS tổ chức theo module và phân tầng là đủ. Khi số lượng người dùng tăng, AI Service, Notification Service hoặc Report Service có thể tách riêng.
+## Giới hạn hiện tại
+
+- Chưa có tính năng đặt lại mật khẩu thật.
+- Cấu trúc đề ĐGNL là cấu hình tham khảo, admin tự khai báo khi ghép đề — chưa cố định theo đề thi thật của một đại học cụ thể.
+- Chưa rà soát pháp lý đầy đủ theo Nghị định 13/2023/NĐ-CP.
+- Frontend chưa có cấu hình production serve qua Nginx với reverse proxy `/api`.
+- Các thư viện `react-hook-form`, `zod`, `recharts` đã cài đặt nhưng chưa được dùng ở bất kỳ component nào trong `frontend/src/`.
