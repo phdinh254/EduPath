@@ -188,6 +188,41 @@ export function AwardIcon(props: IconProps) {
   );
 }
 
+export function StarIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+export function CalculatorIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="2" width="16" height="20" rx="2" />
+      <line x1="8" y1="6" x2="16" y2="6" />
+      <line x1="8" y1="11" x2="8" y2="11.01" />
+      <line x1="12" y1="11" x2="12" y2="11.01" />
+      <line x1="16" y1="11" x2="16" y2="11.01" />
+      <line x1="8" y1="15" x2="8" y2="15.01" />
+      <line x1="12" y1="15" x2="12" y2="15.01" />
+      <line x1="16" y1="15" x2="16" y2="15.01" />
+      <line x1="8" y1="19" x2="8" y2="19.01" />
+      <line x1="12" y1="19" x2="12" y2="19.01" />
+      <line x1="16" y1="19" x2="16" y2="19.01" />
+    </svg>
+  );
+}
+
+export function XIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
 export function LayersIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

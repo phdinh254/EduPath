@@ -1,18 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  fetchAttempt,
-  fetchExamQuestions,
-  saveAnswer,
-  startAttempt,
-} from '../../features/exams/examsApi';
+import { fetchAttempt, fetchExam, fetchExamQuestions, saveAnswer, startAttempt } from '../../features/exams/examsApi';
 import { submitAttempt } from '../../features/grading/gradingApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { ErrorState, LoadingState } from '../../components/StateViews';
-import { Button, Card, PageHeader } from '../../components/ui/Card';
-import { FileTextIcon } from '../../components/ui/Icons';
+import { Button } from '../../components/ui/Card';
+import { Calculator } from '../../components/ui/Calculator';
+import { CalculatorIcon, ClockIcon, StarIcon, XIcon } from '../../components/ui/Icons';
 import type { ExamQuestion } from '../../types/api';
 
 function QuestionInput({
@@ -107,6 +103,12 @@ function QuestionInput({
   );
 }
 
+function formatTime(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 export function StudentExamAttemptPage() {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
@@ -116,7 +118,11 @@ export function StudentExamAttemptPage() {
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [starred, setStarred] = useState<Set<string>>(new Set());
+  const [showCalculator, setShowCalculator] = useState(false);
   const hasStartedRef = useRef(false);
+  const autoSubmittedRef = useRef(false);
 
   useEffect(() => {
     if (!examId || hasStartedRef.current) return;
@@ -134,6 +140,31 @@ export function StudentExamAttemptPage() {
         setStartError(getApiErrorMessage(err));
       });
   }, [examId, navigate]);
+
+  // Câu đánh dấu yêu thích chỉ là gợi nhớ cá nhân trong lúc làm bài — lưu cục
+  // bộ theo attemptId, không cần đồng bộ backend.
+  useEffect(() => {
+    if (!attemptId) return;
+    const raw = localStorage.getItem(`starred-${attemptId}`);
+    if (!raw) return;
+    try {
+      setStarred(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* bỏ qua dữ liệu hỏng */
+    }
+  }, [attemptId]);
+
+  function toggleStar(questionId: string) {
+    setStarred((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      if (attemptId) localStorage.setItem(`starred-${attemptId}`, JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  const examQuery = useQuery({ queryKey: ['exam', examId], queryFn: () => fetchExam(examId!), enabled: !!examId });
 
   const questionsQuery = useQuery({
     queryKey: ['exam-questions', examId],
@@ -173,6 +204,28 @@ export function StudentExamAttemptPage() {
     onError: (err) => showToast(getApiErrorMessage(err), 'error'),
   });
 
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+
+  useEffect(() => {
+    const startedAt = attemptQuery.data?.startedAt;
+    const durationMinutes = examQuery.data?.durationMinutes;
+    if (!startedAt || !durationMinutes) return;
+    const deadline = new Date(startedAt).getTime() + durationMinutes * 60_000;
+
+    function tick() {
+      const secs = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      setRemainingSeconds(secs);
+      if (secs === 0 && !autoSubmittedRef.current && attemptId) {
+        autoSubmittedRef.current = true;
+        submitMutation.mutate();
+      }
+    }
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptQuery.data?.startedAt, examQuery.data?.durationMinutes, attemptId]);
+
   function handleAnswerChange(questionId: string, response: unknown) {
     setAnswers((prev) => ({ ...prev, [questionId]: response }));
     saveMutation.mutate({ questionId, response });
@@ -182,42 +235,136 @@ export function StudentExamAttemptPage() {
   if (!attemptId || questionsQuery.isLoading) return <LoadingState label="Đang chuẩn bị bài thi..." />;
   if (questionsQuery.error) return <ErrorState message={getApiErrorMessage(questionsQuery.error)} />;
 
-  const total = questionsQuery.data?.length ?? 0;
+  const questions = questionsQuery.data ?? [];
+  const total = questions.length;
+  const current = questions[currentIndex];
   const answeredCount = Object.keys(answers).length;
+  const isLast = currentIndex === total - 1;
 
   return (
     <div>
-      <PageHeader
-        title="Làm bài thi"
-        subtitle={`Đã trả lời ${answeredCount}/${total} câu — câu trả lời được lưu tự động`}
-        icon={<FileTextIcon className="h-5 w-5" />}
-      />
-      <div className="space-y-4">
-        {questionsQuery.data?.map((eq, index) => (
-          <Card key={eq.id} className="p-5">
-            <p className="mb-3 font-medium text-slate-900 dark:text-slate-100">
-              <span className="mr-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-indigo-100 px-1.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
-                {index + 1}
-              </span>
-              {eq.question.content}
-              <span className="ml-2 text-xs font-normal text-slate-400">({eq.maxScore} điểm)</span>
+      {/* Thanh trên: thoát, tiêu đề, đồng hồ, máy tính, yêu thích */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/student/exams')}
+            title="Thoát"
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <XIcon className="h-5 w-5" />
+          </button>
+          <div>
+            <p className="font-semibold text-slate-900 dark:text-slate-100">{examQuery.data?.title ?? 'Làm bài thi'}</p>
+            <p className="text-xs text-slate-500">
+              Câu {currentIndex + 1}/{total} · Đã trả lời {answeredCount}/{total}
             </p>
-            <QuestionInput
-              examQuestion={eq}
-              value={answers[eq.questionId]}
-              onChange={(response) => handleAnswerChange(eq.questionId, response)}
-            />
-          </Card>
-        ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {remainingSeconds != null && (
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold ${
+                remainingSeconds < 300
+                  ? 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'
+                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+              }`}
+            >
+              <ClockIcon className="h-4 w-4" />
+              {formatTime(remainingSeconds)}
+            </span>
+          )}
+          <button
+            onClick={() => setShowCalculator((v) => !v)}
+            title="Máy tính"
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+              showCalculator
+                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300'
+                : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <CalculatorIcon className="h-5 w-5" />
+          </button>
+          {current && (
+            <button
+              onClick={() => toggleStar(current.questionId)}
+              title="Đánh dấu câu này để xem lại"
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
+                starred.has(current.questionId)
+                  ? 'text-amber-500'
+                  : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <StarIcon className="h-5 w-5" fill={starred.has(current.questionId) ? 'currentColor' : 'none'} />
+            </button>
+          )}
+        </div>
       </div>
-      <Button
-        variant="success"
-        onClick={() => submitMutation.mutate()}
-        disabled={submitMutation.isPending}
-        className="mt-6 w-full sm:w-auto"
-      >
-        {submitMutation.isPending ? 'Đang nộp bài...' : 'Nộp bài'}
-      </Button>
+
+      {current && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <p className="mb-3 font-medium text-slate-900 dark:text-slate-100">
+            <span className="mr-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-indigo-100 px-1.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
+              {currentIndex + 1}
+            </span>
+            {current.question.content}
+            <span className="ml-2 text-xs font-normal text-slate-400">({current.maxScore} điểm)</span>
+          </p>
+          <QuestionInput
+            examQuestion={current}
+            value={answers[current.questionId]}
+            onChange={(response) => handleAnswerChange(current.questionId, response)}
+          />
+        </div>
+      )}
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <Button variant="secondary" disabled={currentIndex === 0} onClick={() => setCurrentIndex((i) => i - 1)}>
+          ← Câu trước
+        </Button>
+        {isLast ? (
+          <Button variant="success" onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}>
+            {submitMutation.isPending ? 'Đang nộp bài...' : 'Nộp bài'}
+          </Button>
+        ) : (
+          <Button onClick={() => setCurrentIndex((i) => i + 1)}>Câu tiếp →</Button>
+        )}
+      </div>
+
+      {/* Lưới điều hướng câu hỏi */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Danh sách câu hỏi</p>
+        <div className="flex flex-wrap gap-2">
+          {questions.map((eq, index) => {
+            const isAnswered = answers[eq.questionId] != null;
+            const isCurrent = index === currentIndex;
+            const isStarred = starred.has(eq.questionId);
+            return (
+              <button
+                key={eq.id}
+                onClick={() => setCurrentIndex(index)}
+                className={`relative flex h-9 w-9 items-center justify-center rounded-xl text-sm font-medium transition ${
+                  isCurrent
+                    ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-sm'
+                    : isAnswered
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                }`}
+              >
+                {index + 1}
+                {isStarred && (
+                  <StarIcon className="absolute -right-1 -top-1 h-3 w-3 fill-amber-500 text-amber-500" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {showCalculator && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <Calculator onClose={() => setShowCalculator(false)} />
+        </div>
+      )}
     </div>
   );
 }
