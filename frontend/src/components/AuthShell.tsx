@@ -2,12 +2,6 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Logo } from './Logo';
 
-const BENEFITS = [
-  'Chấm điểm AI tức thời — kể cả bài tự luận Ngữ văn',
-  'Đề chuẩn cấu trúc THPT 2025 & Đánh giá năng lực',
-  'Lộ trình ôn tập cá nhân hoá đúng chỗ bạn đang yếu',
-];
-
 export function AuthShell({
   title,
   subtitle,
@@ -18,47 +12,32 @@ export function AuthShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-white dark:bg-slate-950">
-      {/* Panel thương hiệu — chỉ hiện từ lg trở lên */}
-      <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-gradient-to-br from-indigo-600 to-violet-600 p-10 text-white lg:flex xl:p-14">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-24 -left-10 h-72 w-72 rounded-full bg-white/10 blur-3xl"
-        />
-        <Link to="/">
-          <Logo size={34} theme="light" />
-        </Link>
-        <div className="relative">
-          <p className="mb-4 text-2xl font-bold leading-snug">
-            Đang điểm thấp? Đừng để nó lặp lại ở kỳ thi thật.
-          </p>
-          <ul className="space-y-3 text-sm text-indigo-100">
-            {BENEFITS.map((b) => (
-              <li key={b} className="flex items-start gap-2">
-                <span className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full bg-white/15 text-xs">
-                  ✓
-                </span>
-                {b}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="relative text-xs text-indigo-200">© {new Date().getFullYear()} EduPath</p>
-      </div>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-sky-400 via-indigo-500 to-violet-600 px-4 py-10">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -left-24 top-0 h-80 w-80 rounded-full bg-white/15 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-16 bottom-0 h-96 w-96 rounded-full bg-indigo-300/25 blur-3xl"
+      />
 
-      {/* Form */}
-      <div className="flex w-full flex-col justify-center px-6 py-12 sm:px-12 lg:w-1/2">
-        <div className="mx-auto w-full max-w-sm">
-          <Link to="/" className="mb-8 flex lg:hidden">
-            <Logo size={30} />
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{title}</h1>
-          <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
-          <div className="mt-8">{children}</div>
+      <Link
+        to="/"
+        className="absolute left-4 top-4 flex items-center gap-1.5 text-sm font-medium text-white/90 transition hover:text-white sm:left-6 sm:top-6"
+      >
+        <span aria-hidden>←</span> Trang chủ
+      </Link>
+
+      <div className="relative flex w-full max-w-md flex-col items-center">
+        <Link to="/" className="mb-6">
+          <Logo size={30} theme="light" />
+        </Link>
+
+        <div className="w-full rounded-2xl bg-white p-7 shadow-2xl sm:p-8 dark:bg-slate-900">
+          <h1 className="text-center text-xl font-bold text-slate-900 dark:text-white">{title}</h1>
+          <p className="mt-1.5 text-center text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
+          <div className="mt-6">{children}</div>
         </div>
       </div>
     </div>
