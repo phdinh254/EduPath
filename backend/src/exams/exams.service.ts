@@ -190,9 +190,86 @@ export class ExamsService {
   }
 
   // Không còn lớp học/tenant scoping — mọi đề đã tồn tại đều mở cho tất cả
-  // học sinh tự chọn để thi thử/ôn tập.
-  findAllForUser() {
-    return this.prisma.exam.findMany({ orderBy: { createdAt: 'desc' } });
+  // học sinh tự chọn để thi thử/ôn tập. Kèm số liệu khám phá đề (lượt làm,
+  // điểm trung bình, lượt thích) để hiển thị dạng thẻ ở trang Đề thi.
+  async findAllForUser(user: JwtPayload) {
+    const exams = await this.prisma.exam.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    if (exams.length === 0) return [];
+
+    const examIds = exams.map((e) => e.id);
+
+    const [attemptCounts, scores, likeCounts, myLikes] = await Promise.all([
+      this.prisma.examAttempt.groupBy({
+        by: ['examId'],
+        where: { examId: { in: examIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.score.findMany({
+        where: { attempt: { examId: { in: examIds } } },
+        select: { totalScore: true, attempt: { select: { examId: true } } },
+      }),
+      this.prisma.examLike.groupBy({
+        by: ['examId'],
+        where: { examId: { in: examIds } },
+        _count: { _all: true },
+      }),
+      user.role === Role.STUDENT
+        ? this.prisma.examLike.findMany({
+            where: { examId: { in: examIds }, studentId: user.sub },
+            select: { examId: true },
+          })
+        : Promise.resolve<{ examId: string }[]>([]),
+    ]);
+
+    const attemptCountByExam = new Map(
+      attemptCounts.map((a) => [a.examId, a._count._all]),
+    );
+    const likeCountByExam = new Map(
+      likeCounts.map((l) => [l.examId, l._count._all]),
+    );
+    const likedExamIds = new Set(myLikes.map((l) => l.examId));
+
+    const scoreSumByExam = new Map<string, { sum: number; count: number }>();
+    for (const score of scores) {
+      const examId = score.attempt.examId;
+      const entry = scoreSumByExam.get(examId) ?? { sum: 0, count: 0 };
+      entry.sum += score.totalScore;
+      entry.count += 1;
+      scoreSumByExam.set(examId, entry);
+    }
+
+    return exams.map((exam) => {
+      const scoreEntry = scoreSumByExam.get(exam.id);
+      return {
+        ...exam,
+        attemptCount: attemptCountByExam.get(exam.id) ?? 0,
+        likeCount: likeCountByExam.get(exam.id) ?? 0,
+        liked: likedExamIds.has(exam.id),
+        avgScore: scoreEntry
+          ? Math.round((scoreEntry.sum / scoreEntry.count) * 10) / 10
+          : null,
+      };
+    });
+  }
+
+  // Học sinh bấm "thích" một đề thi khi đang khám phá đề — không ảnh hưởng
+  // đến việc làm bài, chỉ phục vụ hiển thị lượt thích.
+  async toggleLike(examId: string, user: JwtPayload) {
+    await this.findExamOrThrow(examId);
+    const existing = await this.prisma.examLike.findUnique({
+      where: { examId_studentId: { examId, studentId: user.sub } },
+    });
+    if (existing) {
+      await this.prisma.examLike.delete({ where: { id: existing.id } });
+    } else {
+      await this.prisma.examLike.create({
+        data: { examId, studentId: user.sub },
+      });
+    }
+    const likeCount = await this.prisma.examLike.count({ where: { examId } });
+    return { liked: !existing, likeCount };
   }
 
   async findOne(id: string) {

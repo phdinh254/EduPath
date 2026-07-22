@@ -84,3 +84,8 @@ export async function fetchAttemptReview(attemptId: string): Promise<AttemptRevi
   const { data } = await apiClient.get<AttemptReviewItem[]>(`/exams/attempts/${attemptId}/review`);
   return data;
 }
+
+export async function toggleExamLike(examId: string): Promise<{ liked: boolean; likeCount: number }> {
+  const { data } = await apiClient.post<{ liked: boolean; likeCount: number }>(`/exams/${examId}/like`);
+  return data;
+}

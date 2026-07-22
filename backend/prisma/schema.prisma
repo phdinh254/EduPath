@@ -72,6 +72,7 @@ model User {
   createdQuestions Question[]      @relation("QuestionCreatedBy")
   createdExams     Exam[]          @relation("ExamCreatedBy")
   examAttempts     ExamAttempt[]
+  examLikes        ExamLike[]
   scoreOverrides   ScoreOverride[]
   refreshTokens    RefreshToken[]
   auditLogs        AuditLog[]
@@ -206,11 +207,26 @@ model Exam {
   sections      ExamSection[]
   examQuestions ExamQuestion[]
   attempts      ExamAttempt[]
+  likes         ExamLike[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([subjectId])
+}
+
+// Học sinh "thích" một đề thi — dùng để hiển thị lượt thích khi khám phá đề,
+// không ảnh hưởng đến việc làm bài.
+model ExamLike {
+  id        String   @id @default(cuid())
+  examId    String
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([examId, studentId])
+  @@index([examId])
 }
 
 // Chỉ dùng cho đề ĐGNL: chia đề thành nhiều phần thi (vd. Tư duy định lượng,

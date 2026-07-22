@@ -81,6 +81,12 @@ export interface Exam {
   createdAt: string;
   updatedAt: string;
   sections?: ExamSection[];
+  // Số liệu khám phá đề — chỉ GET /exams trả về, POST /exams và
+  // /exams/generate thì không (đề vừa tạo chưa có lượt làm/lượt thích).
+  attemptCount?: number;
+  likeCount?: number;
+  liked?: boolean;
+  avgScore?: number | null;
 }
 
 export interface ExamSection {

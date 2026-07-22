@@ -50,14 +50,29 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Danh sách đề thi',
     description:
-      'Mọi vai trò đã đăng nhập. Học sinh tự chọn đề để thi thử/ôn tập — mọi đề đều mở, không còn giới hạn theo lớp học.',
+      'Mọi vai trò đã đăng nhập. Học sinh tự chọn đề để thi thử/ôn tập — mọi đề đều mở, không còn giới hạn theo lớp học. Kèm attemptCount/avgScore/likeCount/liked để hiển thị dạng thẻ khám phá đề.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách đề thi.',
+    description: 'Danh sách đề thi kèm số liệu khám phá.',
   })
-  findAll() {
-    return this.examsService.findAllForUser();
+  findAll(@CurrentUser() user: JwtPayload) {
+    return this.examsService.findAllForUser(user);
+  }
+
+  @Roles(Role.STUDENT)
+  @Post(':id/like')
+  @ApiOperation({
+    summary: 'Thích / bỏ thích một đề thi',
+    description: 'Chỉ STUDENT. Bấm lần nữa để bỏ thích (toggle).',
+  })
+  @ApiParam({ name: 'id', description: 'ID đề thi' })
+  @ApiResponse({
+    status: 201,
+    description: 'Trạng thái thích mới và tổng lượt thích.',
+  })
+  toggleLike(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.examsService.toggleLike(id, user);
   }
 
   @Get(':id')
