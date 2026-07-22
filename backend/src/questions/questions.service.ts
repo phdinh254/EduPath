@@ -36,8 +36,8 @@ function assertValidTrueFalse(dto: {
 export class QuestionsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Nội dung do con người tạo (chỉ ADMIN — giáo viên không còn tự soạn câu
-  // hỏi) luôn vào thẳng kho dùng chung, vì là bên duyệt nội dung cuối cùng.
+  // Nội dung do ADMIN tạo thủ công luôn vào thẳng kho dùng chung, vì ADMIN là
+  // bên duyệt nội dung cuối cùng.
   create(user: JwtPayload, dto: CreateQuestionDto) {
     assertValidTrueFalse(dto);
     return this.prisma.question.create({
@@ -46,8 +46,6 @@ export class QuestionsService {
         options: dto.options as Prisma.InputJsonValue,
         correctAnswer: dto.correctAnswer as Prisma.InputJsonValue,
         createdById: user.sub,
-        tenantId: null,
-        isGlobal: true,
         status: ContentStatus.APPROVED,
       },
     });
@@ -82,8 +80,6 @@ export class QuestionsService {
             correctAnswer: synthesized.correctAnswer as Prisma.InputJsonValue,
             explanation: synthesized.explanation,
             createdById: user.sub,
-            tenantId: null,
-            isGlobal: false,
             status: ContentStatus.PENDING_APPROVAL,
           },
         });
@@ -107,7 +103,6 @@ export class QuestionsService {
         subjectId: params.subjectId,
         type: params.type,
         difficulty: params.difficulty,
-        isGlobal: true,
         status: ContentStatus.APPROVED,
       },
       take: params.count,
@@ -145,11 +140,9 @@ export class QuestionsService {
             correctAnswer: synthesized.correctAnswer as Prisma.InputJsonValue,
             explanation: synthesized.explanation,
             createdById: params.creatorId,
-            tenantId: null,
             // Sinh bù để dùng ngay trong đề — không qua hàng chờ duyệt, vì mục
             // tiêu là đề phải sẵn sàng tức thời. ADMIN vẫn có thể rút lại sau
             // qua reject() nếu phát hiện nội dung có vấn đề.
-            isGlobal: true,
             status: ContentStatus.APPROVED,
           },
         });
@@ -183,7 +176,7 @@ export class QuestionsService {
     }
     return this.prisma.question.update({
       where: { id },
-      data: { status: ContentStatus.APPROVED, isGlobal: true, tenantId: null },
+      data: { status: ContentStatus.APPROVED },
     });
   }
 
@@ -207,7 +200,6 @@ export class QuestionsService {
       where: { id },
       data: {
         status: ContentStatus.REJECTED,
-        isGlobal: false,
         rejectReason: reason ?? null,
       },
     });

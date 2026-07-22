@@ -27,7 +27,7 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Tạo đề thi thủ công',
     description:
-      'Chỉ ADMIN. Giáo viên không còn tự soạn đề — xem POST /exams/generate cho luồng AI ghép đề tự động.',
+      'Chỉ ADMIN. Xem POST /exams/generate cho luồng AI ghép đề tự động (mặc định).',
   })
   @ApiResponse({ status: 201, description: 'Đã tạo đề thi.' })
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateExamDto) {
@@ -50,30 +50,26 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Danh sách đề thi',
     description:
-      'ADMIN: tất cả. TEACHER/STUDENT: đề chính thức/dùng chung + đề của các lớp mình liên quan (giáo viên: lớp thuộc tenant mình; học sinh: lớp mình đang tham gia).',
+      'Mọi vai trò đã đăng nhập. Học sinh tự chọn đề để thi thử/ôn tập — mọi đề đều mở, không còn giới hạn theo lớp học.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách đề thi theo phạm vi phù hợp với vai trò.',
+    description: 'Danh sách đề thi.',
   })
-  findAll(@CurrentUser() user: JwtPayload) {
-    return this.examsService.findAllForUser(user);
+  findAll() {
+    return this.examsService.findAllForUser();
   }
 
   @Get(':id')
   @ApiOperation({
     summary: 'Chi tiết một đề thi',
-    description: 'Theo phạm vi truy cập tương ứng vai trò/tenant/lớp.',
+    description: 'Mọi vai trò đã đăng nhập.',
   })
   @ApiParam({ name: 'id', description: 'ID đề thi' })
   @ApiResponse({ status: 200, description: 'Thông tin đề thi.' })
-  @ApiResponse({
-    status: 403,
-    description: 'Không có quyền truy cập đề thi này.',
-  })
   @ApiResponse({ status: 404, description: 'Không tìm thấy đề thi.' })
-  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.examsService.findOne(id, user);
+  findOne(@Param('id') id: string) {
+    return this.examsService.findOne(id);
   }
 
   @Roles(Role.ADMIN)
@@ -86,8 +82,7 @@ export class ExamsController {
   @ApiResponse({ status: 201, description: 'Đã thêm câu hỏi vào đề.' })
   @ApiResponse({
     status: 403,
-    description:
-      'Không có quyền quản lý đề thi này hoặc câu hỏi không được phép dùng.',
+    description: 'Câu hỏi không được phép dùng.',
   })
   @ApiResponse({
     status: 404,
@@ -105,7 +100,7 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Danh sách câu hỏi trong đề',
     description:
-      'STUDENT: correctAnswer bị ẩn (đang làm bài). TEACHER/ADMIN: đầy đủ đáp án đúng.',
+      'STUDENT: correctAnswer bị ẩn (đang làm bài). ADMIN: đầy đủ đáp án đúng.',
   })
   @ApiParam({ name: 'id', description: 'ID đề thi' })
   @ApiResponse({ status: 200, description: 'Danh sách câu hỏi trong đề.' })
@@ -113,19 +108,14 @@ export class ExamsController {
     return this.examsService.listQuestions(id, user);
   }
 
-  @Roles(Role.TEACHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Get(':id/attempts')
   @ApiOperation({
     summary: 'Danh sách lượt làm bài của một đề',
-    description:
-      'ADMIN: mọi đề. TEACHER: đề chính thức hoặc đề đã gán cho lớp thuộc tenant mình - dùng để theo dõi tiến độ/kết quả học sinh.',
+    description: 'Chỉ ADMIN - dùng để theo dõi/thống kê.',
   })
   @ApiParam({ name: 'id', description: 'ID đề thi' })
   @ApiResponse({ status: 200, description: 'Danh sách lượt làm bài kèm điểm.' })
-  @ApiResponse({
-    status: 403,
-    description: 'Không có quyền quản lý đề thi này.',
-  })
   listAttempts(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.examsService.listAttemptsForExam(id, user);
   }
@@ -135,16 +125,12 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Bắt đầu một lượt làm bài',
     description:
-      'Chỉ STUDENT. Đề gắn lớp (classId khác null): học sinh phải thuộc lớp đó. Đề chính thức (classId=null): mọi học sinh đều làm được. Idempotent: nếu đã có lượt IN_PROGRESS thì trả về lượt đó.',
+      'Chỉ STUDENT. Idempotent: nếu đã có lượt IN_PROGRESS thì trả về lượt đó.',
   })
   @ApiParam({ name: 'id', description: 'ID đề thi' })
   @ApiResponse({
     status: 201,
     description: 'Lượt làm bài (mới tạo hoặc đang dở dang).',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Học sinh không thuộc lớp được giao đề thi này.',
   })
   startAttempt(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.examsService.startAttempt(id, user);
@@ -153,8 +139,7 @@ export class ExamsController {
   @Get('attempts/:attemptId')
   @ApiOperation({
     summary: 'Chi tiết một lượt làm bài',
-    description:
-      'Học sinh chủ bài làm, hoặc giáo viên (lớp thuộc tenant mình)/admin.',
+    description: 'Học sinh chủ bài làm, hoặc ADMIN.',
   })
   @ApiParam({ name: 'attemptId', description: 'ID lượt làm bài' })
   @ApiResponse({
@@ -177,7 +162,7 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Xem đáp án đúng, giải thích và câu sai sau khi nộp bài',
     description:
-      'Chỉ khả dụng khi lượt làm bài đã ở trạng thái SUBMITTED hoặc GRADED (không xem được khi đang làm bài). Học sinh chủ bài làm, hoặc giáo viên/admin cùng tenant với đề.',
+      'Chỉ khả dụng khi lượt làm bài đã ở trạng thái SUBMITTED hoặc GRADED (không xem được khi đang làm bài). Học sinh chủ bài làm, hoặc ADMIN.',
   })
   @ApiParam({ name: 'attemptId', description: 'ID lượt làm bài' })
   @ApiResponse({

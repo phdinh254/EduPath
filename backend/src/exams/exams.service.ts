@@ -27,6 +27,8 @@ const EXAM_DETAIL_INCLUDE = {
   },
 };
 
+// Học sinh tự chọn đề để thi thử/ôn tập — không còn khái niệm lớp học, mọi đề
+// đã tồn tại đều mở cho tất cả học sinh. Chỉ ADMIN quản lý nội dung đề thi.
 @Injectable()
 export class ExamsService {
   constructor(
@@ -34,20 +36,12 @@ export class ExamsService {
     private readonly questionsService: QuestionsService,
   ) {}
 
-  // Tạo đề thủ công — chỉ ADMIN dùng (giáo viên không còn tự soạn đề, xem
-  // generateExam() cho luồng AI sinh đề tự động là mặc định).
+  // Tạo đề thủ công — chỉ ADMIN dùng (xem generateExam() cho luồng AI ghép đề
+  // tự động, vốn là luồng chính).
   async create(user: JwtPayload, dto: CreateExamDto) {
     const category = dto.category ?? ExamCategory.THPT;
     if (category === ExamCategory.THPT && !dto.subjectId) {
       throw new BadRequestException('Đề THPT cần chỉ định subjectId');
-    }
-    if (dto.classId) {
-      const klass = await this.prisma.class.findUnique({
-        where: { id: dto.classId },
-      });
-      if (!klass) {
-        throw new NotFoundException('Không tìm thấy lớp học');
-      }
     }
     return this.prisma.exam.create({
       data: {
@@ -55,18 +49,15 @@ export class ExamsService {
         category,
         subjectId: dto.subjectId,
         durationMinutes: dto.durationMinutes,
-        classId: dto.classId,
-        tenantId: null,
         createdById: user.sub,
       },
     });
   }
 
-  // AI ghép đề hoàn chỉnh tự động, không cần giáo viên soạn: THPT lấy từ ngân
-  // hàng câu hỏi 1 môn (trắc nghiệm 3 dạng hoặc tự luận Văn); ĐGNL chia nhiều
-  // section theo môn, tổng thang điểm 150. Câu hỏi được lấy từ kho đã duyệt,
-  // AI sinh bù tức thời nếu thiếu để đề luôn sẵn sàng ngay (xem
-  // QuestionsService.pickOrSynthesizeQuestions).
+  // AI ghép đề hoàn chỉnh tự động: THPT lấy từ ngân hàng câu hỏi 1 môn (trắc
+  // nghiệm 3 dạng hoặc tự luận Văn); ĐGNL chia nhiều section theo môn, tổng
+  // thang điểm 150. Câu hỏi được lấy từ kho đã duyệt, AI sinh bù tức thời nếu
+  // thiếu để đề luôn sẵn sàng ngay (xem QuestionsService.pickOrSynthesizeQuestions).
   async generateExam(user: JwtPayload, dto: GenerateExamDto) {
     if (dto.category === ExamCategory.DGNL) {
       return this.generateDgnlExam(user, dto);
@@ -78,14 +69,6 @@ export class ExamsService {
     if (!dto.subjectId) {
       throw new BadRequestException('Đề THPT cần chỉ định subjectId');
     }
-    if (dto.classId) {
-      const klass = await this.prisma.class.findUnique({
-        where: { id: dto.classId },
-      });
-      if (!klass) {
-        throw new NotFoundException('Không tìm thấy lớp học');
-      }
-    }
 
     const exam = await this.prisma.exam.create({
       data: {
@@ -93,8 +76,6 @@ export class ExamsService {
         category: ExamCategory.THPT,
         subjectId: dto.subjectId,
         durationMinutes: dto.durationMinutes,
-        classId: dto.classId,
-        tenantId: null,
         createdById: user.sub,
       },
     });
@@ -156,14 +137,6 @@ export class ExamsService {
         'Đề ĐGNL cần khai báo sections (Toán/Ngôn ngữ/Khoa học...)',
       );
     }
-    if (dto.classId) {
-      const klass = await this.prisma.class.findUnique({
-        where: { id: dto.classId },
-      });
-      if (!klass) {
-        throw new NotFoundException('Không tìm thấy lớp học');
-      }
-    }
 
     const exam = await this.prisma.exam.create({
       data: {
@@ -171,8 +144,6 @@ export class ExamsService {
         category: ExamCategory.DGNL,
         subjectId: null,
         durationMinutes: dto.durationMinutes,
-        classId: dto.classId,
-        tenantId: null,
         createdById: user.sub,
       },
     });
@@ -224,83 +195,20 @@ export class ExamsService {
     return exam;
   }
 
-  // Đề thi giờ do ADMIN/AI quản lý toàn hệ thống (không còn sở hữu theo
-  // tenant của giáo viên) — chỉ ADMIN mới được thao tác trực tiếp nội dung đề.
   private assertAdminOnly(user: JwtPayload) {
     if (user.role !== Role.ADMIN) {
       throw new ForbiddenException('Chỉ ADMIN mới có quyền thao tác đề thi');
     }
   }
 
-  // Giáo viên chỉ xem được đề chính thức/dùng chung (classId=null) hoặc đề đã
-  // được gán cho lớp thuộc tenant của mình — dùng để theo dõi tiến độ lớp.
-  private async assertTeacherOrAdminCanView(
-    exam: { classId: string | null },
-    user: JwtPayload,
-  ) {
-    if (user.role === Role.ADMIN) return;
-    if (!exam.classId) return; // đề chính thức/dùng chung
-    const klass = await this.prisma.class.findUnique({
-      where: { id: exam.classId },
-    });
-    if (!klass || klass.tenantId !== user.tenantId) {
-      throw new ForbiddenException('Không có quyền xem đề thi này');
-    }
+  // Không còn lớp học/tenant scoping — mọi đề đã tồn tại đều mở cho tất cả
+  // học sinh tự chọn để thi thử/ôn tập.
+  findAllForUser() {
+    return this.prisma.exam.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
-  async findAllForUser(user: JwtPayload) {
-    if (user.role === Role.ADMIN) {
-      return this.prisma.exam.findMany({ orderBy: { createdAt: 'desc' } });
-    }
-    if (user.role === Role.TEACHER) {
-      // Đề chính thức/dùng chung + đề đã gán cho lớp thuộc tenant của mình.
-      const classIds = (
-        await this.prisma.class.findMany({
-          where: { tenantId: user.tenantId },
-          select: { id: true },
-        })
-      ).map((c) => c.id);
-      return this.prisma.exam.findMany({
-        where: { OR: [{ classId: null }, { classId: { in: classIds } }] },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
-    // Học sinh: đề chính thức/dùng chung + đề của các lớp mình đang tham gia
-    const classIds = (
-      await this.prisma.studentClass.findMany({
-        where: { studentId: user.sub, status: 'ACTIVE' },
-        select: { classId: true },
-      })
-    ).map((sc) => sc.classId);
-    return this.prisma.exam.findMany({
-      where: { OR: [{ classId: null }, { classId: { in: classIds } }] },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  async findOne(id: string, user: JwtPayload) {
-    const exam = await this.findExamOrThrow(id);
-    if (user.role === Role.STUDENT) {
-      await this.assertStudentCanAccess(exam, user.sub);
-    } else {
-      await this.assertTeacherOrAdminCanView(exam, user);
-    }
-    return exam;
-  }
-
-  private async assertStudentCanAccess(
-    exam: { classId: string | null },
-    studentId: string,
-  ) {
-    if (!exam.classId) return; // đề chính thức/dùng chung, mọi học sinh đều làm được
-    const membership = await this.prisma.studentClass.findUnique({
-      where: { studentId_classId: { studentId, classId: exam.classId } },
-    });
-    if (!membership || membership.status !== 'ACTIVE') {
-      throw new ForbiddenException(
-        'Bạn không thuộc lớp học được giao đề thi này',
-      );
-    }
+  async findOne(id: string) {
+    return this.findExamOrThrow(id);
   }
 
   async addQuestion(examId: string, user: JwtPayload, dto: AddExamQuestionDto) {
@@ -313,7 +221,7 @@ export class ExamsService {
     if (!question) {
       throw new NotFoundException('Không tìm thấy câu hỏi');
     }
-    if (question.status !== ContentStatus.APPROVED || !question.isGlobal) {
+    if (question.status !== ContentStatus.APPROVED) {
       throw new ForbiddenException('Câu hỏi chưa ở kho dùng chung đã duyệt');
     }
 
@@ -329,7 +237,7 @@ export class ExamsService {
   }
 
   async listQuestions(examId: string, user: JwtPayload) {
-    const exam = await this.findOne(examId, user);
+    const exam = await this.findOne(examId);
     const examQuestions = await this.prisma.examQuestion.findMany({
       where: { examId: exam.id },
       include: { question: true },
@@ -352,8 +260,7 @@ export class ExamsService {
   }
 
   async startAttempt(examId: string, user: JwtPayload) {
-    const exam = await this.findExamOrThrow(examId);
-    await this.assertStudentCanAccess(exam, user.sub);
+    await this.findExamOrThrow(examId);
 
     // Đọc rồi mới tạo có thể bị race nếu 2 request đến gần như đồng thời (double-click,
     // React StrictMode...). Dùng transaction isolation Serializable để Postgres tự phát
@@ -436,16 +343,13 @@ export class ExamsService {
     if (user.role === Role.STUDENT && attempt.studentId !== user.sub) {
       throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
     }
-    if (user.role === Role.TEACHER) {
-      await this.assertTeacherOrAdminCanView(attempt.exam, user);
-    }
     return attempt;
   }
 
-  // Giáo viên/admin xem toàn bộ lượt làm bài của một đề để theo dõi tiến độ học sinh.
+  // ADMIN xem toàn bộ lượt làm bài của một đề để theo dõi/thống kê.
   async listAttemptsForExam(examId: string, user: JwtPayload) {
-    const exam = await this.findExamOrThrow(examId);
-    await this.assertTeacherOrAdminCanView(exam, user);
+    this.assertAdminOnly(user);
+    await this.findExamOrThrow(examId);
     return this.prisma.examAttempt.findMany({
       where: { examId },
       include: {
@@ -479,18 +383,14 @@ export class ExamsService {
     if (user.role === Role.STUDENT && attempt.studentId !== user.sub) {
       throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
     }
-    if (user.role === Role.TEACHER) {
-      await this.assertTeacherOrAdminCanView(attempt.exam, user);
-    }
     if (attempt.status === AttemptStatus.IN_PROGRESS) {
       throw new BadRequestException(
         'Bài làm chưa được nộp, chưa thể xem đáp án',
       );
     }
 
-    // AI chấm và công bố điểm ngay lập tức (kể cả tự luận Văn) — không còn
-    // trạng thái chờ giáo viên duyệt trước khi học sinh xem điểm/nhận xét AI.
-    // Giáo viên vẫn có thể điều chỉnh lại sau qua GradingService.reviewEssay.
+    // AI chấm và công bố điểm ngay lập tức (kể cả tự luận Văn) — ADMIN vẫn có
+    // thể điều chỉnh lại sau qua GradingService.reviewEssay.
     const answersByQuestionId = new Map(
       attempt.answers.map((a) => [a.questionId, a]),
     );

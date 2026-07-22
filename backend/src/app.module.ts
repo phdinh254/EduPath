@@ -7,7 +7,6 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SubjectsModule } from './subjects/subjects.module';
-import { ClassesModule } from './classes/classes.module';
 import { QuestionsModule } from './questions/questions.module';
 import { ExamsModule } from './exams/exams.module';
 import { GradingModule } from './grading/grading.module';
@@ -23,7 +22,6 @@ import { RolesGuard } from './auth/guards/roles.guard';
     AuthModule,
     UsersModule,
     SubjectsModule,
-    ClassesModule,
     QuestionsModule,
     ExamsModule,
     GradingModule,

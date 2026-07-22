@@ -31,7 +31,7 @@ export class QuestionsController {
   @ApiOperation({
     summary: 'Tạo câu hỏi thủ công',
     description:
-      'Chỉ ADMIN. Câu hỏi vào thẳng kho dùng chung (APPROVED, isGlobal=true).',
+      'Chỉ ADMIN. Câu hỏi vào thẳng kho dùng chung (status=APPROVED).',
   })
   @ApiResponse({ status: 201, description: 'Đã tạo câu hỏi.' })
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateQuestionDto) {
@@ -86,7 +86,7 @@ export class QuestionsController {
   @ApiParam({ name: 'id', description: 'ID câu hỏi' })
   @ApiResponse({
     status: 201,
-    description: 'Đã duyệt: status=APPROVED, isGlobal=true.',
+    description: 'Đã duyệt: status=APPROVED.',
   })
   @ApiResponse({
     status: 400,

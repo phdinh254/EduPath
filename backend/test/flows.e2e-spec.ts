@@ -1,27 +1,20 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module';
+import {
+  adminFactory,
+  body,
+  createTestApp,
+  IdBody,
+  registerFactory,
+  TokenBody,
+} from './utils';
 
-// Bộ test bao phủ các luồng cốt lõi yêu cầu bởi tích hợp frontend <-> backend:
-// đăng ký/đăng nhập theo vai trò, tạo lớp, tham gia bằng mã mời, làm bài,
-// ẩn đáp án đúng, RBAC theo tenant, duyệt điểm Văn, nhãn điểm AI tham khảo,
-// lộ trình AI sau khi chấm, và chặn route theo vai trò.
+// Bộ test bao phủ các luồng cốt lõi của mô hình B2C thuần: đăng ký luôn tạo
+// STUDENT, ADMIN quản lý toàn bộ nội dung, học sinh tự chọn đề thi để làm
+// (không còn lớp học), chấm điểm tức thời, nhãn điểm AI tham khảo, ADMIN hậu
+// kiểm điểm Văn, lộ trình AI sau khi chấm, và chặn route theo vai trò.
 
-interface IdBody {
-  id: string;
-}
-interface TokenBody {
-  accessToken: string;
-}
-interface ClassBody {
-  id: string;
-  inviteCode: string;
-}
-interface StudentClassBody {
-  class: { name: string };
-}
 interface ExamQuestionBody {
   question: { correctAnswer?: unknown };
 }
@@ -42,23 +35,16 @@ interface RoadmapBody {
   stages: unknown[];
 }
 
-function body<T>(res: request.Response): T {
-  return res.body as T;
-}
-
 describe('Core flows (e2e)', () => {
   let app: INestApplication<App>;
+  let register: ReturnType<typeof registerFactory>;
+  let makeAdmin: ReturnType<typeof adminFactory>;
   const suffix = Date.now();
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true }),
-    );
-    await app.init();
+    app = await createTestApp();
+    register = registerFactory(app);
+    makeAdmin = adminFactory(app);
   });
 
   afterAll(async () => {
@@ -67,21 +53,19 @@ describe('Core flows (e2e)', () => {
 
   const server = () => app.getHttpServer();
 
-  async function register(payload: Record<string, unknown>): Promise<string> {
+  it('1: registers and logs in a student; the register payload cannot force a different role', async () => {
     const res = await request(server())
       .post('/auth/register')
-      .send(payload)
+      .send({
+        email: `student1_${suffix}@test.dev`,
+        password: 'password123',
+        fullName: 'Student One',
+        // Cố tình gửi kèm role/tenantName — phải bị bỏ qua hoàn toàn.
+        role: 'ADMIN',
+        tenantName: 'Should be ignored',
+      })
       .expect(201);
-    return body<TokenBody>(res).accessToken;
-  }
-
-  it('1-2: registers and logs in a student and a teacher', async () => {
-    const studentToken = await register({
-      email: `student1_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Student One',
-      role: 'STUDENT',
-    });
+    const studentToken = body<TokenBody>(res).accessToken;
     expect(typeof studentToken).toBe('string');
 
     const loginRes = await request(server())
@@ -90,79 +74,31 @@ describe('Core flows (e2e)', () => {
       .expect(200);
     expect(body<TokenBody>(loginRes).accessToken).toBeDefined();
 
-    const teacherToken = await register({
-      email: `teacher1_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Teacher One',
-      role: 'TEACHER',
-      tenantName: `Tenant One ${suffix}`,
-    });
-    expect(typeof teacherToken).toBe('string');
-  });
-
-  it('3-4: teacher creates a class, student joins it by invite code', async () => {
-    const teacherToken = await register({
-      email: `teacher2_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Teacher Two',
-      role: 'TEACHER',
-      tenantName: `Tenant Two ${suffix}`,
-    });
-    const studentToken = await register({
-      email: `student2_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Student Two',
-      role: 'STUDENT',
-    });
-
-    const classRes = await request(server())
-      .post('/classes')
-      .set('Authorization', `Bearer ${teacherToken}`)
-      .send({ name: 'Lớp e2e' })
-      .expect(201);
-    const { inviteCode } = body<ClassBody>(classRes);
-    expect(inviteCode).toHaveLength(8);
-
+    // Nếu payload role='ADMIN' bị tôn trọng, endpoint admin-only sẽ trả 200 thay vì 403.
     await request(server())
-      .post('/classes/join')
+      .get('/admin/stats')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ inviteCode })
-      .expect(201);
-
-    const mine = await request(server())
-      .get('/classes/mine')
-      .set('Authorization', `Bearer ${studentToken}`)
-      .expect(200);
-    const mineBody = body<StudentClassBody[]>(mine);
-    expect(mineBody).toHaveLength(1);
-    expect(mineBody[0].class.name).toBe('Lớp e2e');
+      .expect(403);
   });
 
-  it('5-6-7: attempt lifecycle hides correctAnswer, rejects a student outside the class', async () => {
-    const adminToken = await register({
-      email: `admin1_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Admin One',
-      role: 'ADMIN',
-    });
-    const teacherToken = await register({
-      email: `teacher3_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Teacher Three',
-      role: 'TEACHER',
-      tenantName: `Tenant Three ${suffix}`,
-    });
-    const insiderToken = await register({
+  it('2: an ADMIN account can only be provisioned directly (not via public register)', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin2_${suffix}@test.dev`,
+    );
+    await request(server())
+      .get('/admin/stats')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+  });
+
+  it('3-4: attempt lifecycle hides correctAnswer, any logged-in student can access an existing exam', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin3_${suffix}@test.dev`,
+    );
+    const { accessToken: studentToken } = await register({
       email: `student3_${suffix}@test.dev`,
       password: 'password123',
-      fullName: 'Student Insider',
-      role: 'STUDENT',
-    });
-    const outsiderToken = await register({
-      email: `student4_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Student Outsider',
-      role: 'STUDENT',
+      fullName: 'Student Three',
     });
 
     const subjectRes = await request(server())
@@ -177,8 +113,6 @@ describe('Core flows (e2e)', () => {
       .send({ name: 'Topic e2e' })
       .expect(201);
     const topic = body<IdBody>(topicRes);
-    // Giáo viên không còn tự soạn câu hỏi/đề thi — ADMIN (thủ công) hoặc AI
-    // (POST /exams/generate) đảm nhận toàn bộ nội dung.
     const questionRes = await request(server())
       .post('/questions')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -194,27 +128,10 @@ describe('Core flows (e2e)', () => {
       .expect(201);
     const question = body<IdBody>(questionRes);
 
-    const klassRes = await request(server())
-      .post('/classes')
-      .set('Authorization', `Bearer ${teacherToken}`)
-      .send({ name: 'Lớp attempt' })
-      .expect(201);
-    const klass = body<ClassBody>(klassRes);
-    await request(server())
-      .post('/classes/join')
-      .set('Authorization', `Bearer ${insiderToken}`)
-      .send({ inviteCode: klass.inviteCode })
-      .expect(201);
-
     const examRes = await request(server())
       .post('/exams')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        title: 'Exam e2e',
-        subjectId: subject.id,
-        durationMinutes: 10,
-        classId: klass.id,
-      })
+      .send({ title: 'Exam e2e', subjectId: subject.id, durationMinutes: 10 })
       .expect(201);
     const exam = body<IdBody>(examRes);
     await request(server())
@@ -223,126 +140,76 @@ describe('Core flows (e2e)', () => {
       .send({ questionId: question.id, order: 1, maxScore: 0.25 })
       .expect(201);
 
-    // Học sinh ngoài lớp bị từ chối khi truy cập đề riêng
-    await request(server())
-      .post(`/exams/${exam.id}/attempts`)
-      .set('Authorization', `Bearer ${outsiderToken}`)
-      .expect(403);
-
+    // Bất kỳ học sinh nào cũng truy cập được đề đã tồn tại — không còn giới hạn theo lớp.
     const attemptRes = await request(server())
       .post(`/exams/${exam.id}/attempts`)
-      .set('Authorization', `Bearer ${insiderToken}`)
+      .set('Authorization', `Bearer ${studentToken}`)
       .expect(201);
     const attempt = body<IdBody>(attemptRes);
 
     // Đáp án đúng không được xuất hiện trong response dành cho học sinh khi đang làm bài
     const examQuestionsRes = await request(server())
       .get(`/exams/${exam.id}/questions`)
-      .set('Authorization', `Bearer ${insiderToken}`)
+      .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
     const examQuestions = body<ExamQuestionBody[]>(examQuestionsRes);
     expect(examQuestions[0].question.correctAnswer).toBeUndefined();
 
     await request(server())
       .post(`/exams/attempts/${attempt.id}/answers`)
-      .set('Authorization', `Bearer ${insiderToken}`)
+      .set('Authorization', `Bearer ${studentToken}`)
       .send({ questionId: question.id, response: { index: 1 } })
       .expect(201);
 
     const submittedRes = await request(server())
       .post(`/grading/attempts/${attempt.id}/submit`)
-      .set('Authorization', `Bearer ${insiderToken}`)
+      .set('Authorization', `Bearer ${studentToken}`)
       .expect(201);
     const submitted = body<AttemptBody>(submittedRes);
     expect(submitted.status).toBe('GRADED');
     expect(submitted.totalScore).toBe(0.25);
   });
 
-  it('8: teacher cannot view attempts of a class they do not own; the owning teacher can', async () => {
-    const adminToken = await register({
-      email: `admin2_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Admin Two',
-      role: 'ADMIN',
-    });
-    const ownerTeacherToken = await register({
-      email: `teacher4_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Teacher Four',
-      role: 'TEACHER',
-      tenantName: `Tenant Four ${suffix}`,
-    });
-    const outsiderTeacherToken = await register({
-      email: `teacher5_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Teacher Five',
-      role: 'TEACHER',
-      tenantName: `Tenant Five ${suffix}`,
-    });
-
-    const subjectRes = await request(server())
-      .post('/subjects')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ code: `SUB2${suffix}`, name: 'Subject two' })
-      .expect(201);
-    const subject = body<IdBody>(subjectRes);
-    const klassRes = await request(server())
-      .post('/classes')
-      .set('Authorization', `Bearer ${ownerTeacherToken}`)
-      .send({ name: 'Lớp owner-only' })
-      .expect(201);
-    const klass = body<ClassBody>(klassRes);
-    // Đề thi giờ do ADMIN quản lý toàn hệ thống, chỉ gán classId cho một lớp
-    // cụ thể — quyền xem lượt làm bài của giáo viên phụ thuộc vào việc họ có
-    // sở hữu lớp đó hay không, không còn theo tenant sở hữu đề.
-    const examRes = await request(server())
-      .post('/exams')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        title: 'Class-only exam',
-        subjectId: subject.id,
-        durationMinutes: 10,
-        classId: klass.id,
-      })
-      .expect(201);
-    const exam = body<IdBody>(examRes);
-
-    await request(server())
-      .get(`/exams/${exam.id}/attempts`)
-      .set('Authorization', `Bearer ${outsiderTeacherToken}`)
-      .expect(403);
-
-    await request(server())
-      .get(`/exams/${exam.id}/attempts`)
-      .set('Authorization', `Bearer ${ownerTeacherToken}`)
-      .expect(200);
-  });
-
-  it('9-10: essay is AI-graded and published instantly (class exam), teacher can still adjust it after the fact', async () => {
-    const adminToken = await register({
-      email: `admin3_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Admin Three',
-      role: 'ADMIN',
-    });
-    const teacherToken = await register({
-      email: `teacher6_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Teacher Six',
-      role: 'TEACHER',
-      tenantName: `Tenant Six ${suffix}`,
-    });
-    const classStudentToken = await register({
+  it('5: only ADMIN can create subjects, questions, and exams', async () => {
+    const { accessToken: studentToken } = await register({
       email: `student5_${suffix}@test.dev`,
       password: 'password123',
       fullName: 'Student Five',
-      role: 'STUDENT',
     });
-    const selfStudyToken = await register({
+
+    await request(server())
+      .post('/subjects')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ code: 'X', name: 'X' })
+      .expect(403);
+
+    await request(server())
+      .post('/questions')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({
+        subjectId: 'irrelevant',
+        topicId: 'irrelevant',
+        type: 'MULTIPLE_CHOICE',
+        difficulty: 'KNOWLEDGE',
+        content: 'x',
+      })
+      .expect(403);
+
+    await request(server())
+      .post('/exams')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ title: 'x', subjectId: 'irrelevant', durationMinutes: 10 })
+      .expect(403);
+  });
+
+  it('6-7: essay is AI-graded and published instantly; ADMIN can still adjust it after the fact', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin6_${suffix}@test.dev`,
+    );
+    const { accessToken: studentToken } = await register({
       email: `student6_${suffix}@test.dev`,
       password: 'password123',
       fullName: 'Student Six',
-      role: 'STUDENT',
     });
 
     const subjectRes = await request(server())
@@ -370,122 +237,67 @@ describe('Core flows (e2e)', () => {
       .expect(201);
     const essayQuestion = body<IdBody>(essayRes);
 
-    const klassRes = await request(server())
-      .post('/classes')
-      .set('Authorization', `Bearer ${teacherToken}`)
-      .send({ name: 'Lớp Văn' })
-      .expect(201);
-    const klass = body<ClassBody>(klassRes);
-    await request(server())
-      .post('/classes/join')
-      .set('Authorization', `Bearer ${classStudentToken}`)
-      .send({ inviteCode: klass.inviteCode })
-      .expect(201);
-
-    // Đề gắn với lớp -> AI vẫn chấm và công bố điểm ngay, không còn chờ giáo
-    // viên duyệt trước; giáo viên chỉ có thể điều chỉnh lại SAU khi đã công bố.
-    const classExamRes = await request(server())
+    const examRes = await request(server())
       .post('/exams')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        title: 'KT Văn lớp',
-        subjectId: subject.id,
-        durationMinutes: 20,
-        classId: klass.id,
-      })
+      .send({ title: 'KT Văn', subjectId: subject.id, durationMinutes: 20 })
       .expect(201);
-    const classExam = body<IdBody>(classExamRes);
+    const exam = body<IdBody>(examRes);
     await request(server())
-      .post(`/exams/${classExam.id}/questions`)
+      .post(`/exams/${exam.id}/questions`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ questionId: essayQuestion.id, order: 1, maxScore: 3 })
       .expect(201);
 
-    const classAttemptRes = await request(server())
-      .post(`/exams/${classExam.id}/attempts`)
-      .set('Authorization', `Bearer ${classStudentToken}`)
+    const attemptRes = await request(server())
+      .post(`/exams/${exam.id}/attempts`)
+      .set('Authorization', `Bearer ${studentToken}`)
       .expect(201);
-    const classAttempt = body<IdBody>(classAttemptRes);
+    const attempt = body<IdBody>(attemptRes);
     await request(server())
-      .post(`/exams/attempts/${classAttempt.id}/answers`)
-      .set('Authorization', `Bearer ${classStudentToken}`)
+      .post(`/exams/attempts/${attempt.id}/answers`)
+      .set('Authorization', `Bearer ${studentToken}`)
       .send({
         questionId: essayQuestion.id,
-        response: { text: 'bài làm của học sinh trong lớp' },
+        response: { text: 'bài làm của học sinh' },
       })
       .expect(201);
-    const classSubmittedRes = await request(server())
-      .post(`/grading/attempts/${classAttempt.id}/submit`)
-      .set('Authorization', `Bearer ${classStudentToken}`)
+    const submittedRes = await request(server())
+      .post(`/grading/attempts/${attempt.id}/submit`)
+      .set('Authorization', `Bearer ${studentToken}`)
       .expect(201);
-    const classSubmitted = body<AttemptBody>(classSubmittedRes);
-    expect(classSubmitted.status).toBe('GRADED');
-    const aiGradedAnswer = classSubmitted.answers[0];
+    const submitted = body<AttemptBody>(submittedRes);
+    expect(submitted.status).toBe('GRADED');
+    const aiGradedAnswer = submitted.answers[0];
     expect(aiGradedAnswer.isAiReferenceOnly).toBe(true);
     expect(aiGradedAnswer.scoreAwarded).not.toBeNull();
 
-    // Giáo viên sở hữu lớp vẫn có thể điều chỉnh lại điểm AI đã công bố (hậu kiểm).
+    // ADMIN vẫn điều chỉnh lại được điểm AI đã công bố (hậu kiểm).
     const reviewedRes = await request(server())
       .post(`/grading/answers/${aiGradedAnswer.id}/review`)
-      .set('Authorization', `Bearer ${teacherToken}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .send({ finalScore: 2.5, comment: 'Khá tốt' })
       .expect(201);
     const reviewed = body<AttemptBody>(reviewedRes);
     expect(reviewed.status).toBe('GRADED');
     expect(reviewed.totalScore).toBe(2.5);
 
-    // Đề không gắn lớp -> tự học -> hành vi chấm giống hệt: công bố ngay, có nhãn tham khảo
-    const selfStudyExamRes = await request(server())
-      .post('/exams')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({
-        title: 'KT Văn tự học',
-        subjectId: subject.id,
-        durationMinutes: 20,
-      })
-      .expect(201);
-    const selfStudyExam = body<IdBody>(selfStudyExamRes);
+    // Học sinh không phải ADMIN không được tự duyệt lại điểm của mình.
     await request(server())
-      .post(`/exams/${selfStudyExam.id}/questions`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ questionId: essayQuestion.id, order: 1, maxScore: 3 })
-      .expect(201);
-    const selfAttemptRes = await request(server())
-      .post(`/exams/${selfStudyExam.id}/attempts`)
-      .set('Authorization', `Bearer ${selfStudyToken}`)
-      .expect(201);
-    const selfAttempt = body<IdBody>(selfAttemptRes);
-    await request(server())
-      .post(`/exams/attempts/${selfAttempt.id}/answers`)
-      .set('Authorization', `Bearer ${selfStudyToken}`)
-      .send({
-        questionId: essayQuestion.id,
-        response: { text: 'bài làm tự học không thuộc lớp nào' },
-      })
-      .expect(201);
-    const selfSubmittedRes = await request(server())
-      .post(`/grading/attempts/${selfAttempt.id}/submit`)
-      .set('Authorization', `Bearer ${selfStudyToken}`)
-      .expect(201);
-    const selfSubmitted = body<AttemptBody>(selfSubmittedRes);
-    expect(selfSubmitted.status).toBe('GRADED');
-    const aiAnswer = selfSubmitted.answers[0];
-    expect(aiAnswer.isAiReferenceOnly).toBe(true);
-    expect(aiAnswer.scoreAwarded).not.toBeNull();
+      .post(`/grading/answers/${aiGradedAnswer.id}/review`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ finalScore: 3 })
+      .expect(403);
   });
 
-  it('11: study roadmap appears after an attempt is fully graded with a weak topic', async () => {
-    const adminToken = await register({
-      email: `admin4_${suffix}@test.dev`,
+  it('8: study roadmap appears after an attempt is fully graded with a weak topic', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin8_${suffix}@test.dev`,
+    );
+    const { accessToken: studentToken } = await register({
+      email: `student8_${suffix}@test.dev`,
       password: 'password123',
-      fullName: 'Admin Four',
-      role: 'ADMIN',
-    });
-    const studentToken = await register({
-      email: `student7_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Student Seven',
-      role: 'STUDENT',
+      fullName: 'Student Eight',
     });
 
     const subjectRes = await request(server())
@@ -588,32 +400,18 @@ describe('Core flows (e2e)', () => {
     expect(roadmap[0].stages.length).toBe(4);
   });
 
-  it('12: routes are blocked by role (RBAC)', async () => {
-    const studentToken = await register({
-      email: `student8_${suffix}@test.dev`,
+  it('9: routes are blocked by role (RBAC)', async () => {
+    const { accessToken: studentToken } = await register({
+      email: `student9_${suffix}@test.dev`,
       password: 'password123',
-      fullName: 'Student Eight',
-      role: 'STUDENT',
-    });
-    const teacherToken = await register({
-      email: `teacher7_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: 'Teacher Seven',
-      role: 'TEACHER',
-      tenantName: `Tenant Seven ${suffix}`,
+      fullName: 'Student Nine',
     });
 
     // Học sinh không được tạo môn học (admin-only)
     await request(server())
       .post('/subjects')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ code: 'X', name: 'X' })
-      .expect(403);
-
-    // Giáo viên không được truy cập route quản trị
-    await request(server())
-      .get('/admin/stats')
-      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ code: 'Y', name: 'Y' })
       .expect(403);
 
     // Học sinh không được truy cập route quản trị

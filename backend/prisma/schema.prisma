@@ -11,9 +11,10 @@ datasource db {
 
 // ---------- Enums ----------
 
+// B2C thuần: học sinh tự chọn đề thi và ôn tập, không qua lớp học/trung tâm.
+// ADMIN quản lý toàn bộ nội dung hệ thống (không tự đăng ký công khai được).
 enum Role {
   STUDENT
-  TEACHER
   ADMIN
 }
 
@@ -31,16 +32,13 @@ enum DifficultyLevel {
   HIGH_APPLICATION // vận dụng cao
 }
 
+// PENDING_APPROVAL: AI vừa sinh, chờ ADMIN duyệt nội dung/bản quyền.
+// APPROVED: đã vào kho dùng chung, dùng được trong đề thi.
+// REJECTED: bị admin từ chối/rút khỏi kho dùng chung.
 enum ContentStatus {
-  DRAFT
   PENDING_APPROVAL
   APPROVED
   REJECTED
-}
-
-enum StudentClassStatus {
-  ACTIVE
-  REMOVED
 }
 
 enum AttemptStatus {
@@ -60,25 +58,21 @@ enum ExamCategory {
   DGNL // Đánh giá năng lực — nhiều môn/section trong 1 đề, thang điểm 150
 }
 
-// ---------- Core: User / Tenant / Class ----------
+// ---------- Core: User ----------
 
 model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
   fullName     String
   role         Role
   dateOfBirth  DateTime?
-  isActive     Boolean @default(true)
+  isActive     Boolean   @default(true)
 
-  // Giáo viên/trung tâm sở hữu đúng một tenant (phạm vi dữ liệu riêng của họ)
-  ownedTenant Tenant?
-
-  studentClasses   StudentClass[]
-  createdQuestions Question[]     @relation("QuestionCreatedBy")
-  createdExams     Exam[]         @relation("ExamCreatedBy")
+  createdQuestions Question[]      @relation("QuestionCreatedBy")
+  createdExams     Exam[]          @relation("ExamCreatedBy")
   examAttempts     ExamAttempt[]
-  teacherReviews   TeacherReview[]
+  scoreOverrides   ScoreOverride[]
   refreshTokens    RefreshToken[]
   auditLogs        AuditLog[]
 
@@ -89,65 +83,15 @@ model User {
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
-}
-
-// Mỗi giáo viên/trung tâm là một tenant riêng, sở hữu các lớp và nội dung riêng.
-model Tenant {
-  id      String @id @default(cuid())
-  name    String
-  ownerId String @unique
-  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
-  classes   Class[]
-  questions Question[]
-  exams     Exam[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Class {
-  id       String @id @default(cuid())
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name     String
-  // Mã lớp dùng để học sinh tự tham gia
-  inviteCode String  @unique
-  // Nếu true: lớp xuất hiện trong danh sách công khai để học sinh tự duyệt và tham gia
-  isPublic   Boolean @default(false)
-
-  studentClasses StudentClass[]
-  exams          Exam[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([tenantId])
-}
-
-// Quan hệ nhiều-nhiều giữa học sinh và lớp — một học sinh có thể thuộc nhiều lớp/trung tâm cùng lúc.
-model StudentClass {
-  id        String              @id @default(cuid())
-  studentId String
-  student   User                @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classId   String
-  class     Class               @relation(fields: [classId], references: [id], onDelete: Cascade)
-  status    StudentClassStatus  @default(ACTIVE)
-  joinedAt  DateTime            @default(now())
-  removedAt DateTime?
-
-  @@unique([studentId, classId])
-  @@index([classId])
-  @@index([studentId])
 }
 
 // ---------- Subjects / Topics / Questions ----------
@@ -180,7 +124,8 @@ model Topic {
   @@index([subjectId])
 }
 
-// Ngân hàng câu hỏi. tenantId = null nghĩa là thuộc kho dùng chung (do admin quản lý).
+// Ngân hàng câu hỏi dùng chung toàn hệ thống (không còn phạm vi riêng theo
+// giáo viên/trung tâm) — status=APPROVED nghĩa là dùng được trong đề thi.
 model Question {
   id         String          @id @default(cuid())
   subjectId  String
@@ -196,16 +141,11 @@ model Question {
   correctAnswer Json?
   explanation   String?
 
-  tenantId String?
-  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
   createdById String
   createdBy   User   @relation("QuestionCreatedBy", fields: [createdById], references: [id])
 
-  // isGlobal=true + status=APPROVED nghĩa là câu hỏi đã vào kho dùng chung toàn hệ thống
-  isGlobal Boolean       @default(false)
-  status   ContentStatus @default(DRAFT)
-  // Lý do admin từ chối đề xuất (status=REJECTED), hiển thị lại cho giáo viên đề xuất
+  status ContentStatus @default(PENDING_APPROVAL)
+  // Lý do admin từ chối đề xuất (status=REJECTED)
   rejectReason String?
 
   examQuestions ExamQuestion[]
@@ -215,7 +155,6 @@ model Question {
   updatedAt DateTime @updatedAt
 
   @@index([subjectId, topicId])
-  @@index([tenantId])
   @@index([status])
 }
 
@@ -230,12 +169,6 @@ model Exam {
   subjectId String?
   subject   Subject? @relation(fields: [subjectId], references: [id])
 
-  // tenantId/classId = null nghĩa là đề chính thức/dùng chung
-  tenantId String?
-  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  classId  String?
-  class    Class?  @relation(fields: [classId], references: [id], onDelete: SetNull)
-
   createdById     String
   createdBy       User    @relation("ExamCreatedBy", fields: [createdById], references: [id])
   durationMinutes Int
@@ -248,7 +181,6 @@ model Exam {
   updatedAt DateTime @updatedAt
 
   @@index([subjectId])
-  @@index([tenantId])
 }
 
 // Chỉ dùng cho đề ĐGNL: chia đề thành nhiều phần thi (vd. Tư duy định lượng,
@@ -295,9 +227,9 @@ model ExamAttempt {
   submittedAt DateTime?
   totalScore  Float?
 
-  answers            Answer[]
-  score              Score?
-  weaknessAnalyses   WeaknessAnalysis[]
+  answers          Answer[]
+  score            Score?
+  weaknessAnalyses WeaknessAnalysis[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -320,12 +252,13 @@ model Answer {
   isCorrect    Boolean?
   scoreAwarded Float?
 
-  // Chấm sơ bộ bằng AI (tự luận Ngữ văn)
-  aiPreliminaryScore   Float?
-  aiComment            String?
-  isAiReferenceOnly    Boolean @default(false)
+  // Chấm bằng AI, công bố ngay lập tức (tự luận Ngữ văn) — luôn gắn nhãn
+  // "điểm tham khảo do AI đánh giá" (isAiReferenceOnly=true).
+  aiPreliminaryScore Float?
+  aiComment          String?
+  isAiReferenceOnly  Boolean @default(false)
 
-  teacherReview TeacherReview?
+  scoreOverride ScoreOverride?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -334,17 +267,17 @@ model Answer {
   @@index([attemptId])
 }
 
-// Điểm giáo viên duyệt/điều chỉnh lại cho câu trả lời tự luận đã được AI chấm sơ bộ
-model TeacherReview {
-  id             String   @id @default(cuid())
-  answerId       String   @unique
-  answer         Answer   @relation(fields: [answerId], references: [id], onDelete: Cascade)
-  teacherId      String
-  teacher        User     @relation(fields: [teacherId], references: [id])
+// ADMIN điều chỉnh lại điểm AI đã công bố cho câu tự luận (hậu kiểm chất lượng).
+model ScoreOverride {
+  id              String   @id @default(cuid())
+  answerId        String   @unique
+  answer          Answer   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  reviewerId      String
+  reviewer        User     @relation(fields: [reviewerId], references: [id])
   originalAiScore Float?
-  finalScore     Float
-  comment        String?
-  reviewedAt     DateTime @default(now())
+  finalScore      Float
+  comment         String?
+  reviewedAt      DateTime @default(now())
 }
 
 // Điểm tổng hợp của một lượt làm bài, kèm phân tích theo chuyên đề để làm đầu vào cho AI
@@ -353,15 +286,15 @@ model Score {
   attemptId  String      @unique
   attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   totalScore Float
-  // Tỷ lệ đúng theo topic/chuyên đề: { topicId: { correct, total } }
+  // Tỷ lệ đúng theo topic/chuyên đề: { topicId: { correct, total, subjectId } }
   topicBreakdown Json
-  gradedAt   DateTime    @default(now())
+  gradedAt       DateTime @default(now())
 }
 
 // ---------- AI cá nhân hóa ----------
 
 model WeaknessAnalysis {
-  id        String      @id @default(cuid())
+  id        String       @id @default(cuid())
   studentId String
   subjectId String
   attemptId String?

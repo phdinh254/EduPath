@@ -9,22 +9,13 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   findByEmail(email: string) {
-    return this.prisma.user.findUnique({
-      where: { email },
-      include: { ownedTenant: true },
-    });
+    return this.prisma.user.findUnique({ where: { email } });
   }
 
-  findByIdWithTenant(id: string) {
+  findById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        isActive: true,
-        ownedTenant: { select: { id: true } },
-      },
+      select: { id: true, email: true, role: true, isActive: true },
     });
   }
 
@@ -47,7 +38,6 @@ export class UsersService {
         role: true,
         isActive: true,
         createdAt: true,
-        ownedTenant: { select: { id: true, name: true } },
       },
     });
     if (!user) {
@@ -66,7 +56,6 @@ export class UsersService {
         role: true,
         isActive: true,
         createdAt: true,
-        ownedTenant: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });

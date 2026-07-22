@@ -39,10 +39,6 @@ export class GenerateExamDto {
   @Min(1)
   durationMinutes: number;
 
-  @IsOptional()
-  @IsString()
-  classId?: string;
-
   // --- THPT: 1 môn/đề ---
   @IsOptional()
   @IsString()

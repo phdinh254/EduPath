@@ -1,8 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  BadRequestException,
-  ConflictException,
   Injectable,
+  ConflictException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -18,7 +17,6 @@ interface JwtPayloadShape {
   sub: string;
   email: string;
   role: string;
-  tenantId?: string;
   exp: number;
 }
 
@@ -35,33 +33,22 @@ export class AuthService {
     private readonly prisma: PrismaService,
   ) {}
 
+  // Đăng ký công khai luôn tạo STUDENT — tài khoản ADMIN chỉ tạo trực tiếp
+  // trong DB, không bao giờ nhận role từ request để tránh tự leo quyền.
   async register(dto: RegisterDto) {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
       throw new ConflictException('Email đã được sử dụng');
-    }
-    if (dto.role === Role.TEACHER && !dto.tenantName) {
-      throw new BadRequestException(
-        'Giáo viên/trung tâm cần cung cấp tenantName khi đăng ký',
-      );
     }
     const passwordHash = (await argon2.hash(dto.password)) as string;
     const user = await this.usersService.create({
       email: dto.email,
       passwordHash,
       fullName: dto.fullName,
-      role: dto.role,
+      role: Role.STUDENT,
     });
 
-    let tenantId: string | undefined;
-    if (dto.role === Role.TEACHER) {
-      const tenant = await this.prisma.tenant.create({
-        data: { name: dto.tenantName!, ownerId: user.id },
-      });
-      tenantId = tenant.id;
-    }
-
-    return this.buildTokens(user.id, user.email, user.role, tenantId);
+    return this.buildTokens(user.id, user.email, user.role);
   }
 
   async login(dto: LoginDto) {
@@ -69,12 +56,7 @@ export class AuthService {
     if (!user || !(await argon2.verify(user.passwordHash, dto.password))) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
-    return this.buildTokens(
-      user.id,
-      user.email,
-      user.role,
-      user.ownedTenant?.id,
-    );
+    return this.buildTokens(user.id, user.email, user.role);
   }
 
   async refresh(refreshToken: string) {
@@ -115,17 +97,12 @@ export class AuthService {
       );
     }
 
-    const user = await this.usersService.findByIdWithTenant(payload.sub);
+    const user = await this.usersService.findById(payload.sub);
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Tài khoản không còn hoạt động');
     }
 
-    return this.buildTokens(
-      user.id,
-      user.email,
-      user.role,
-      user.ownedTenant?.id,
-    );
+    return this.buildTokens(user.id, user.email, user.role);
   }
 
   async logout(refreshToken: string) {
@@ -137,13 +114,8 @@ export class AuthService {
     return { success: true };
   }
 
-  private async buildTokens(
-    sub: string,
-    email: string,
-    role: string,
-    tenantId?: string,
-  ) {
-    const payload = { sub, email, role, tenantId };
+  private async buildTokens(sub: string, email: string, role: string) {
+    const payload = { sub, email, role };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),

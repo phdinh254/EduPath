@@ -14,9 +14,9 @@ export class AuthController {
   @Public()
   @Post('register')
   @ApiOperation({
-    summary: 'Đăng ký tài khoản mới',
+    summary: 'Đăng ký tài khoản học sinh mới',
     description:
-      'Công khai, không cần token. role=TEACHER bắt buộc kèm tenantName để tự động tạo Tenant riêng cho giáo viên/trung tâm đó.',
+      'Công khai, không cần token. Luôn tạo tài khoản STUDENT — tài khoản ADMIN chỉ được tạo trực tiếp trong DB.',
   })
   @ApiResponse({
     status: 201,
@@ -24,7 +24,7 @@ export class AuthController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Dữ liệu không hợp lệ (ví dụ TEACHER thiếu tenantName).',
+    description: 'Dữ liệu không hợp lệ.',
   })
   @ApiResponse({ status: 409, description: 'Email đã được sử dụng.' })
   register(@Body() dto: RegisterDto) {

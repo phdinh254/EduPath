@@ -8,8 +8,6 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: Role;
-  // Đảm bảo giáo viên chỉ thao tác trong phạm vi tenant của mình (RBAC ở backend)
-  tenantId?: string;
 }
 
 @Injectable()

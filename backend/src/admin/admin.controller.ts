@@ -25,25 +25,11 @@ export class AdminController {
   @ApiResponse({
     status: 200,
     description:
-      'Số lượng học sinh, giáo viên, tenant, môn học, đề thi, lượt làm bài và câu hỏi theo trạng thái.',
+      'Số lượng học sinh, môn học, đề thi, lượt làm bài và câu hỏi theo trạng thái.',
   })
   @ApiResponse({ status: 403, description: 'Không phải ADMIN.' })
   getStats() {
     return this.adminService.getStats();
-  }
-
-  @Get('tenants')
-  @ApiOperation({
-    summary: 'Danh sách tenant (giáo viên/trung tâm)',
-    description: 'Chỉ ADMIN.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Danh sách tenant kèm chủ sở hữu và số lớp/câu hỏi/đề thi.',
-  })
-  @ApiResponse({ status: 403, description: 'Không phải ADMIN.' })
-  findTenants() {
-    return this.adminService.findTenants();
   }
 
   @Get('audit-logs')

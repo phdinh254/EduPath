@@ -1,12 +1,7 @@
-import {
-  IsEmail,
-  IsEnum,
-  IsOptional,
-  IsString,
-  MinLength,
-} from 'class-validator';
-import { Role } from '@prisma/client';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 
+// Đăng ký công khai luôn tạo tài khoản STUDENT — không nhận role từ client.
+// Tài khoản ADMIN chỉ được tạo trực tiếp trong DB (không có luồng tự đăng ký).
 export class RegisterDto {
   @IsEmail()
   email: string;
@@ -17,12 +12,4 @@ export class RegisterDto {
 
   @IsString()
   fullName: string;
-
-  @IsEnum(Role)
-  role: Role;
-
-  // Bắt buộc khi role = TEACHER: tên lớp học/trung tâm, dùng để tạo Tenant riêng của giáo viên đó
-  @IsOptional()
-  @IsString()
-  tenantName?: string;
 }
