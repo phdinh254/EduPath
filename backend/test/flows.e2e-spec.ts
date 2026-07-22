@@ -177,6 +177,8 @@ describe('Core flows (e2e)', () => {
       .send({ name: 'Topic e2e' })
       .expect(201);
     const topic = body<IdBody>(topicRes);
+    // Giáo viên không còn tự soạn câu hỏi/đề thi — ADMIN (thủ công) hoặc AI
+    // (POST /exams/generate) đảm nhận toàn bộ nội dung.
     const questionRes = await request(server())
       .post('/questions')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -206,7 +208,7 @@ describe('Core flows (e2e)', () => {
 
     const examRes = await request(server())
       .post('/exams')
-      .set('Authorization', `Bearer ${teacherToken}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .send({
         title: 'Exam e2e',
         subjectId: subject.id,
@@ -217,7 +219,7 @@ describe('Core flows (e2e)', () => {
     const exam = body<IdBody>(examRes);
     await request(server())
       .post(`/exams/${exam.id}/questions`)
-      .set('Authorization', `Bearer ${teacherToken}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .send({ questionId: question.id, order: 1, maxScore: 0.25 })
       .expect(201);
 
@@ -256,7 +258,7 @@ describe('Core flows (e2e)', () => {
     expect(submitted.totalScore).toBe(0.25);
   });
 
-  it('8: teacher cannot access another tenant exam attempts', async () => {
+  it('8: teacher cannot view attempts of a class they do not own; the owning teacher can', async () => {
     const adminToken = await register({
       email: `admin2_${suffix}@test.dev`,
       password: 'password123',
@@ -284,13 +286,23 @@ describe('Core flows (e2e)', () => {
       .send({ code: `SUB2${suffix}`, name: 'Subject two' })
       .expect(201);
     const subject = body<IdBody>(subjectRes);
+    const klassRes = await request(server())
+      .post('/classes')
+      .set('Authorization', `Bearer ${ownerTeacherToken}`)
+      .send({ name: 'Lớp owner-only' })
+      .expect(201);
+    const klass = body<ClassBody>(klassRes);
+    // Đề thi giờ do ADMIN quản lý toàn hệ thống, chỉ gán classId cho một lớp
+    // cụ thể — quyền xem lượt làm bài của giáo viên phụ thuộc vào việc họ có
+    // sở hữu lớp đó hay không, không còn theo tenant sở hữu đề.
     const examRes = await request(server())
       .post('/exams')
-      .set('Authorization', `Bearer ${ownerTeacherToken}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .send({
-        title: 'Owner-only exam',
+        title: 'Class-only exam',
         subjectId: subject.id,
         durationMinutes: 10,
+        classId: klass.id,
       })
       .expect(201);
     const exam = body<IdBody>(examRes);
@@ -299,9 +311,14 @@ describe('Core flows (e2e)', () => {
       .get(`/exams/${exam.id}/attempts`)
       .set('Authorization', `Bearer ${outsiderTeacherToken}`)
       .expect(403);
+
+    await request(server())
+      .get(`/exams/${exam.id}/attempts`)
+      .set('Authorization', `Bearer ${ownerTeacherToken}`)
+      .expect(200);
   });
 
-  it('9-10: teacher reviews an essay (class exam); self-study essay gets the AI-reference label', async () => {
+  it('9-10: essay is AI-graded and published instantly (class exam), teacher can still adjust it after the fact', async () => {
     const adminToken = await register({
       email: `admin3_${suffix}@test.dev`,
       password: 'password123',
@@ -365,10 +382,11 @@ describe('Core flows (e2e)', () => {
       .send({ inviteCode: klass.inviteCode })
       .expect(201);
 
-    // Đề gắn với lớp -> chờ giáo viên duyệt
+    // Đề gắn với lớp -> AI vẫn chấm và công bố điểm ngay, không còn chờ giáo
+    // viên duyệt trước; giáo viên chỉ có thể điều chỉnh lại SAU khi đã công bố.
     const classExamRes = await request(server())
       .post('/exams')
-      .set('Authorization', `Bearer ${teacherToken}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .send({
         title: 'KT Văn lớp',
         subjectId: subject.id,
@@ -379,7 +397,7 @@ describe('Core flows (e2e)', () => {
     const classExam = body<IdBody>(classExamRes);
     await request(server())
       .post(`/exams/${classExam.id}/questions`)
-      .set('Authorization', `Bearer ${teacherToken}`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .send({ questionId: essayQuestion.id, order: 1, maxScore: 3 })
       .expect(201);
 
@@ -401,13 +419,14 @@ describe('Core flows (e2e)', () => {
       .set('Authorization', `Bearer ${classStudentToken}`)
       .expect(201);
     const classSubmitted = body<AttemptBody>(classSubmittedRes);
-    expect(classSubmitted.status).toBe('SUBMITTED'); // chờ giáo viên duyệt
-    const pendingAnswer = classSubmitted.answers[0];
-    expect(pendingAnswer.isAiReferenceOnly).toBe(false);
-    expect(pendingAnswer.scoreAwarded).toBeNull();
+    expect(classSubmitted.status).toBe('GRADED');
+    const aiGradedAnswer = classSubmitted.answers[0];
+    expect(aiGradedAnswer.isAiReferenceOnly).toBe(true);
+    expect(aiGradedAnswer.scoreAwarded).not.toBeNull();
 
+    // Giáo viên sở hữu lớp vẫn có thể điều chỉnh lại điểm AI đã công bố (hậu kiểm).
     const reviewedRes = await request(server())
-      .post(`/grading/answers/${pendingAnswer.id}/review`)
+      .post(`/grading/answers/${aiGradedAnswer.id}/review`)
       .set('Authorization', `Bearer ${teacherToken}`)
       .send({ finalScore: 2.5, comment: 'Khá tốt' })
       .expect(201);
@@ -415,7 +434,7 @@ describe('Core flows (e2e)', () => {
     expect(reviewed.status).toBe('GRADED');
     expect(reviewed.totalScore).toBe(2.5);
 
-    // Đề không gắn lớp -> tự học -> điểm AI công bố trực tiếp, có nhãn tham khảo
+    // Đề không gắn lớp -> tự học -> hành vi chấm giống hệt: công bố ngay, có nhãn tham khảo
     const selfStudyExamRes = await request(server())
       .post('/exams')
       .set('Authorization', `Bearer ${adminToken}`)

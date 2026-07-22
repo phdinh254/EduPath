@@ -13,6 +13,7 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { ExamsService } from './exams.service';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { AddExamQuestionDto } from './dto/add-exam-question.dto';
+import { GenerateExamDto } from './dto/generate-exam.dto';
 import { SaveAnswerDto } from './dto/save-answer.dto';
 
 @ApiTags('exams')
@@ -21,24 +22,35 @@ import { SaveAnswerDto } from './dto/save-answer.dto';
 export class ExamsController {
   constructor(private readonly examsService: ExamsService) {}
 
-  @Roles(Role.TEACHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Post()
   @ApiOperation({
-    summary: 'Tạo đề thi mới',
+    summary: 'Tạo đề thi thủ công',
     description:
-      'TEACHER (thuộc tenant của họ, có thể gán classId) hoặc ADMIN (đề chính thức/dùng chung, tenantId=null).',
+      'Chỉ ADMIN. Giáo viên không còn tự soạn đề — xem POST /exams/generate cho luồng AI ghép đề tự động.',
   })
   @ApiResponse({ status: 201, description: 'Đã tạo đề thi.' })
-  @ApiResponse({ status: 403, description: 'Giáo viên chưa có tenant.' })
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateExamDto) {
     return this.examsService.create(user, dto);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('generate')
+  @ApiOperation({
+    summary: 'AI tự động ghép đề hoàn chỉnh',
+    description:
+      'Chỉ ADMIN. category=THPT: 1 môn, trắc nghiệm 3 dạng hoặc tự luận Văn. category=DGNL: nhiều section theo môn, tổng thang điểm 150. Câu hỏi lấy từ kho đã duyệt, AI sinh bù ngay nếu thiếu.',
+  })
+  @ApiResponse({ status: 201, description: 'Đã sinh đề thi hoàn chỉnh.' })
+  generate(@CurrentUser() user: JwtPayload, @Body() dto: GenerateExamDto) {
+    return this.examsService.generateExam(user, dto);
   }
 
   @Get()
   @ApiOperation({
     summary: 'Danh sách đề thi',
     description:
-      'ADMIN: tất cả. TEACHER: đề thuộc tenant của mình. STUDENT: đề chính thức/dùng chung + đề của các lớp mình đang tham gia.',
+      'ADMIN: tất cả. TEACHER/STUDENT: đề chính thức/dùng chung + đề của các lớp mình liên quan (giáo viên: lớp thuộc tenant mình; học sinh: lớp mình đang tham gia).',
   })
   @ApiResponse({
     status: 200,
@@ -64,12 +76,11 @@ export class ExamsController {
     return this.examsService.findOne(id, user);
   }
 
-  @Roles(Role.TEACHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @Post(':id/questions')
   @ApiOperation({
     summary: 'Thêm câu hỏi vào đề thi',
-    description:
-      'TEACHER/ADMIN sở hữu đề. Câu hỏi phải thuộc tenant của người tạo hoặc đã ở kho dùng chung.',
+    description: 'Chỉ ADMIN. Câu hỏi phải đã ở kho dùng chung đã duyệt.',
   })
   @ApiParam({ name: 'id', description: 'ID đề thi' })
   @ApiResponse({ status: 201, description: 'Đã thêm câu hỏi vào đề.' })
@@ -107,7 +118,7 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Danh sách lượt làm bài của một đề',
     description:
-      'TEACHER/ADMIN sở hữu đề - dùng để theo dõi tiến độ/kết quả học sinh.',
+      'ADMIN: mọi đề. TEACHER: đề chính thức hoặc đề đã gán cho lớp thuộc tenant mình - dùng để theo dõi tiến độ/kết quả học sinh.',
   })
   @ApiParam({ name: 'id', description: 'ID đề thi' })
   @ApiResponse({ status: 200, description: 'Danh sách lượt làm bài kèm điểm.' })
@@ -124,7 +135,7 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Bắt đầu một lượt làm bài',
     description:
-      'Chỉ STUDENT. Đề gắn lớp: học sinh phải thuộc lớp đó. Đề chính thức (tenantId=null): mọi học sinh đều làm được. Idempotent: nếu đã có lượt IN_PROGRESS thì trả về lượt đó.',
+      'Chỉ STUDENT. Đề gắn lớp (classId khác null): học sinh phải thuộc lớp đó. Đề chính thức (classId=null): mọi học sinh đều làm được. Idempotent: nếu đã có lượt IN_PROGRESS thì trả về lượt đó.',
   })
   @ApiParam({ name: 'id', description: 'ID đề thi' })
   @ApiResponse({
@@ -143,7 +154,7 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Chi tiết một lượt làm bài',
     description:
-      'Học sinh chủ bài làm, hoặc giáo viên/admin cùng tenant với đề.',
+      'Học sinh chủ bài làm, hoặc giáo viên (lớp thuộc tenant mình)/admin.',
   })
   @ApiParam({ name: 'attemptId', description: 'ID lượt làm bài' })
   @ApiResponse({

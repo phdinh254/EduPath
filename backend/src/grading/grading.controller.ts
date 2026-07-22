@@ -24,13 +24,12 @@ export class GradingController {
   @ApiOperation({
     summary: 'Nộp bài và chấm điểm tự động',
     description:
-      'Chỉ STUDENT chủ bài làm. Chấm trắc nghiệm/đúng-sai/trả lời ngắn ngay lập tức. Câu tự luận: chấm sơ bộ bằng AI (rule-based) - nếu đề không gắn lớp thì công bố điểm ngay kèm nhãn tham khảo, nếu có gắn lớp thì chờ giáo viên duyệt. Roadmap AI được tạo tự động khi lượt làm bài được chấm xong hoàn toàn.',
+      'Chỉ STUDENT chủ bài làm. Chấm trắc nghiệm/đúng-sai/trả lời ngắn và tự luận (AI, rule-based) ngay lập tức, công bố điểm ngay không chờ giáo viên duyệt trước (kể cả bài thuộc lớp). Điểm tự luận luôn gắn nhãn "điểm tham khảo do AI đánh giá"; giáo viên có thể điều chỉnh lại sau qua /grading/answers/:id/review. Roadmap AI được tạo tự động ngay sau khi chấm xong.',
   })
   @ApiParam({ name: 'attemptId', description: 'ID lượt làm bài' })
   @ApiResponse({
     status: 201,
-    description:
-      'Lượt làm bài đã chấm (GRADED) hoặc đang chờ duyệt Văn (SUBMITTED).',
+    description: 'Lượt làm bài đã chấm xong (GRADED).',
   })
   @ApiResponse({
     status: 400,
@@ -50,13 +49,13 @@ export class GradingController {
   @Roles(Role.TEACHER, Role.ADMIN)
   @Get('pending-review')
   @ApiOperation({
-    summary: 'Danh sách bài tự luận đang chờ duyệt điểm',
+    summary: 'Danh sách bài tự luận AI đã chấm, chưa được giáo viên hậu kiểm',
     description:
-      'TEACHER: giới hạn trong tenant của mình. ADMIN: toàn hệ thống.',
+      'Điểm đã công bố cho học sinh — đây là danh sách để giáo viên/admin spot-check chất lượng AI, không chặn học sinh xem điểm. TEACHER: giới hạn lớp thuộc tenant của mình. ADMIN: toàn hệ thống.',
   })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách câu trả lời tự luận chờ duyệt kèm điểm AI sơ bộ.',
+    description: 'Danh sách câu trả lời tự luận kèm điểm AI đã công bố.',
   })
   findPendingReview(@CurrentUser() user: JwtPayload) {
     return this.gradingService.findPendingReview(user);
@@ -65,15 +64,14 @@ export class GradingController {
   @Roles(Role.TEACHER, Role.ADMIN)
   @Post('answers/:answerId/review')
   @ApiOperation({
-    summary: 'Duyệt/điều chỉnh điểm bài tự luận',
+    summary: 'Điều chỉnh lại điểm bài tự luận (hậu kiểm)',
     description:
-      'TEACHER/ADMIN cùng tenant với đề thi. Công bố điểm chính thức, ghi vào TeacherReview.',
+      'TEACHER (lớp thuộc tenant mình) / ADMIN. Ghi đè điểm AI đã công bố, lưu vào TeacherReview — không còn là bước duyệt chặn công bố ban đầu.',
   })
   @ApiParam({ name: 'answerId', description: 'ID câu trả lời tự luận' })
   @ApiResponse({
     status: 201,
-    description:
-      'Đã công bố điểm chính thức, lượt làm bài chuyển sang GRADED nếu không còn câu nào chờ duyệt.',
+    description: 'Đã cập nhật điểm chính thức.',
   })
   @ApiResponse({
     status: 400,

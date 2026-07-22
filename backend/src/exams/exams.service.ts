@@ -7,23 +7,39 @@ import {
 import {
   AttemptStatus,
   ContentStatus,
+  ExamCategory,
   Prisma,
   QuestionType,
   Role,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { QuestionsService } from '../questions/questions.service';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { AddExamQuestionDto } from './dto/add-exam-question.dto';
+import { GenerateExamDto } from './dto/generate-exam.dto';
+
+const EXAM_DETAIL_INCLUDE = {
+  sections: { orderBy: { order: 'asc' as const } },
+  examQuestions: {
+    include: { question: true },
+    orderBy: { order: 'asc' as const },
+  },
+};
 
 @Injectable()
 export class ExamsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly questionsService: QuestionsService,
+  ) {}
 
+  // Tạo đề thủ công — chỉ ADMIN dùng (giáo viên không còn tự soạn đề, xem
+  // generateExam() cho luồng AI sinh đề tự động là mặc định).
   async create(user: JwtPayload, dto: CreateExamDto) {
-    const isAdmin = user.role === Role.ADMIN;
-    if (!isAdmin && !user.tenantId) {
-      throw new ForbiddenException('Giáo viên chưa có tenant');
+    const category = dto.category ?? ExamCategory.THPT;
+    if (category === ExamCategory.THPT && !dto.subjectId) {
+      throw new BadRequestException('Đề THPT cần chỉ định subjectId');
     }
     if (dto.classId) {
       const klass = await this.prisma.class.findUnique({
@@ -32,19 +48,171 @@ export class ExamsService {
       if (!klass) {
         throw new NotFoundException('Không tìm thấy lớp học');
       }
-      if (!isAdmin && klass.tenantId !== user.tenantId) {
-        throw new ForbiddenException('Lớp học này không thuộc tenant của bạn');
-      }
     }
     return this.prisma.exam.create({
       data: {
         title: dto.title,
+        category,
         subjectId: dto.subjectId,
         durationMinutes: dto.durationMinutes,
         classId: dto.classId,
-        tenantId: isAdmin ? null : user.tenantId,
+        tenantId: null,
         createdById: user.sub,
       },
+    });
+  }
+
+  // AI ghép đề hoàn chỉnh tự động, không cần giáo viên soạn: THPT lấy từ ngân
+  // hàng câu hỏi 1 môn (trắc nghiệm 3 dạng hoặc tự luận Văn); ĐGNL chia nhiều
+  // section theo môn, tổng thang điểm 150. Câu hỏi được lấy từ kho đã duyệt,
+  // AI sinh bù tức thời nếu thiếu để đề luôn sẵn sàng ngay (xem
+  // QuestionsService.pickOrSynthesizeQuestions).
+  async generateExam(user: JwtPayload, dto: GenerateExamDto) {
+    if (dto.category === ExamCategory.DGNL) {
+      return this.generateDgnlExam(user, dto);
+    }
+    return this.generateThptExam(user, dto);
+  }
+
+  private async generateThptExam(user: JwtPayload, dto: GenerateExamDto) {
+    if (!dto.subjectId) {
+      throw new BadRequestException('Đề THPT cần chỉ định subjectId');
+    }
+    if (dto.classId) {
+      const klass = await this.prisma.class.findUnique({
+        where: { id: dto.classId },
+      });
+      if (!klass) {
+        throw new NotFoundException('Không tìm thấy lớp học');
+      }
+    }
+
+    const exam = await this.prisma.exam.create({
+      data: {
+        title: dto.title,
+        category: ExamCategory.THPT,
+        subjectId: dto.subjectId,
+        durationMinutes: dto.durationMinutes,
+        classId: dto.classId,
+        tenantId: null,
+        createdById: user.sub,
+      },
+    });
+
+    let order = 1;
+    const essayCount = dto.essayCount ?? 0;
+    if (essayCount > 0) {
+      // Văn: chỉ tự luận (Đọc hiểu + Viết), không trộn trắc nghiệm.
+      const essayMaxScore = 10 / essayCount;
+      const essays = await this.questionsService.pickOrSynthesizeQuestions({
+        subjectId: dto.subjectId,
+        type: QuestionType.ESSAY,
+        count: essayCount,
+        creatorId: user.sub,
+      });
+      for (const q of essays) {
+        await this.prisma.examQuestion.create({
+          data: {
+            examId: exam.id,
+            questionId: q.id,
+            order: order++,
+            maxScore: essayMaxScore,
+          },
+        });
+      }
+      return this.withDetails(exam.id);
+    }
+
+    const plan: Array<[QuestionType, number, number]> = [
+      [QuestionType.MULTIPLE_CHOICE, dto.multipleChoiceCount ?? 24, 0.25],
+      [QuestionType.TRUE_FALSE, dto.trueFalseCount ?? 4, 1],
+      [QuestionType.SHORT_ANSWER, dto.shortAnswerCount ?? 0, 0.5],
+    ];
+    for (const [type, count, maxScore] of plan) {
+      if (count <= 0) continue;
+      const questions = await this.questionsService.pickOrSynthesizeQuestions({
+        subjectId: dto.subjectId,
+        type,
+        count,
+        creatorId: user.sub,
+      });
+      for (const q of questions) {
+        await this.prisma.examQuestion.create({
+          data: {
+            examId: exam.id,
+            questionId: q.id,
+            order: order++,
+            maxScore,
+          },
+        });
+      }
+    }
+    return this.withDetails(exam.id);
+  }
+
+  private async generateDgnlExam(user: JwtPayload, dto: GenerateExamDto) {
+    if (!dto.sections?.length) {
+      throw new BadRequestException(
+        'Đề ĐGNL cần khai báo sections (Toán/Ngôn ngữ/Khoa học...)',
+      );
+    }
+    if (dto.classId) {
+      const klass = await this.prisma.class.findUnique({
+        where: { id: dto.classId },
+      });
+      if (!klass) {
+        throw new NotFoundException('Không tìm thấy lớp học');
+      }
+    }
+
+    const exam = await this.prisma.exam.create({
+      data: {
+        title: dto.title,
+        category: ExamCategory.DGNL,
+        subjectId: null,
+        durationMinutes: dto.durationMinutes,
+        classId: dto.classId,
+        tenantId: null,
+        createdById: user.sub,
+      },
+    });
+
+    let order = 1;
+    for (const [i, section] of dto.sections.entries()) {
+      const examSection = await this.prisma.examSection.create({
+        data: {
+          examId: exam.id,
+          name: section.name,
+          order: i + 1,
+          maxScore: section.maxScore,
+        },
+      });
+      const perQuestionScore = section.maxScore / section.questionCount;
+      const questions = await this.questionsService.pickOrSynthesizeQuestions({
+        subjectId: section.subjectId,
+        type: QuestionType.MULTIPLE_CHOICE,
+        count: section.questionCount,
+        creatorId: user.sub,
+      });
+      for (const q of questions) {
+        await this.prisma.examQuestion.create({
+          data: {
+            examId: exam.id,
+            questionId: q.id,
+            sectionId: examSection.id,
+            order: order++,
+            maxScore: perQuestionScore,
+          },
+        });
+      }
+    }
+    return this.withDetails(exam.id);
+  }
+
+  private withDetails(examId: string) {
+    return this.prisma.exam.findUnique({
+      where: { id: examId },
+      include: EXAM_DETAIL_INCLUDE,
     });
   }
 
@@ -56,13 +224,27 @@ export class ExamsService {
     return exam;
   }
 
-  private assertManageable(
-    exam: { tenantId: string | null },
+  // Đề thi giờ do ADMIN/AI quản lý toàn hệ thống (không còn sở hữu theo
+  // tenant của giáo viên) — chỉ ADMIN mới được thao tác trực tiếp nội dung đề.
+  private assertAdminOnly(user: JwtPayload) {
+    if (user.role !== Role.ADMIN) {
+      throw new ForbiddenException('Chỉ ADMIN mới có quyền thao tác đề thi');
+    }
+  }
+
+  // Giáo viên chỉ xem được đề chính thức/dùng chung (classId=null) hoặc đề đã
+  // được gán cho lớp thuộc tenant của mình — dùng để theo dõi tiến độ lớp.
+  private async assertTeacherOrAdminCanView(
+    exam: { classId: string | null },
     user: JwtPayload,
   ) {
     if (user.role === Role.ADMIN) return;
-    if (exam.tenantId !== user.tenantId) {
-      throw new ForbiddenException('Bạn không có quyền quản lý đề thi này');
+    if (!exam.classId) return; // đề chính thức/dùng chung
+    const klass = await this.prisma.class.findUnique({
+      where: { id: exam.classId },
+    });
+    if (!klass || klass.tenantId !== user.tenantId) {
+      throw new ForbiddenException('Không có quyền xem đề thi này');
     }
   }
 
@@ -71,8 +253,15 @@ export class ExamsService {
       return this.prisma.exam.findMany({ orderBy: { createdAt: 'desc' } });
     }
     if (user.role === Role.TEACHER) {
+      // Đề chính thức/dùng chung + đề đã gán cho lớp thuộc tenant của mình.
+      const classIds = (
+        await this.prisma.class.findMany({
+          where: { tenantId: user.tenantId },
+          select: { id: true },
+        })
+      ).map((c) => c.id);
       return this.prisma.exam.findMany({
-        where: { tenantId: user.tenantId },
+        where: { OR: [{ classId: null }, { classId: { in: classIds } }] },
         orderBy: { createdAt: 'desc' },
       });
     }
@@ -84,37 +273,26 @@ export class ExamsService {
       })
     ).map((sc) => sc.classId);
     return this.prisma.exam.findMany({
-      where: { OR: [{ tenantId: null }, { classId: { in: classIds } }] },
+      where: { OR: [{ classId: null }, { classId: { in: classIds } }] },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async findOne(id: string, user: JwtPayload) {
     const exam = await this.findExamOrThrow(id);
-    if (user.role !== Role.STUDENT) {
-      this.assertManageable(exam, user);
-    } else {
+    if (user.role === Role.STUDENT) {
       await this.assertStudentCanAccess(exam, user.sub);
+    } else {
+      await this.assertTeacherOrAdminCanView(exam, user);
     }
     return exam;
   }
 
   private async assertStudentCanAccess(
-    exam: { id: string; tenantId: string | null; classId: string | null },
+    exam: { classId: string | null },
     studentId: string,
   ) {
-    if (exam.tenantId === null) return; // đề chính thức/dùng chung
-    if (!exam.classId) {
-      throw new ForbiddenException('Đề thi chưa được gán cho lớp học');
-    }
-    // Phòng thủ lớp hai: đối chiếu lớp thực sự thuộc đúng tenant của đề thi,
-    // phòng trường hợp dữ liệu classId/tenantId không nhất quán do lỗi khác.
-    const klass = await this.prisma.class.findUnique({
-      where: { id: exam.classId },
-    });
-    if (!klass || klass.tenantId !== exam.tenantId) {
-      throw new ForbiddenException('Đề thi chưa được gán cho lớp học');
-    }
+    if (!exam.classId) return; // đề chính thức/dùng chung, mọi học sinh đều làm được
     const membership = await this.prisma.studentClass.findUnique({
       where: { studentId_classId: { studentId, classId: exam.classId } },
     });
@@ -126,8 +304,8 @@ export class ExamsService {
   }
 
   async addQuestion(examId: string, user: JwtPayload, dto: AddExamQuestionDto) {
+    this.assertAdminOnly(user);
     const exam = await this.findExamOrThrow(examId);
-    this.assertManageable(exam, user);
 
     const question = await this.prisma.question.findUnique({
       where: { id: dto.questionId },
@@ -135,18 +313,15 @@ export class ExamsService {
     if (!question) {
       throw new NotFoundException('Không tìm thấy câu hỏi');
     }
-    const questionAccessible =
-      user.role === Role.ADMIN ||
-      question.tenantId === user.tenantId ||
-      (question.isGlobal && question.status === ContentStatus.APPROVED);
-    if (!questionAccessible) {
-      throw new ForbiddenException('Bạn không có quyền sử dụng câu hỏi này');
+    if (question.status !== ContentStatus.APPROVED || !question.isGlobal) {
+      throw new ForbiddenException('Câu hỏi chưa ở kho dùng chung đã duyệt');
     }
 
     return this.prisma.examQuestion.create({
       data: {
-        examId,
+        examId: exam.id,
         questionId: dto.questionId,
+        sectionId: dto.sectionId,
         order: dto.order,
         maxScore: dto.maxScore,
       },
@@ -261,8 +436,8 @@ export class ExamsService {
     if (user.role === Role.STUDENT && attempt.studentId !== user.sub) {
       throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
     }
-    if (user.role === Role.TEACHER && attempt.exam.tenantId !== user.tenantId) {
-      throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
+    if (user.role === Role.TEACHER) {
+      await this.assertTeacherOrAdminCanView(attempt.exam, user);
     }
     return attempt;
   }
@@ -270,7 +445,7 @@ export class ExamsService {
   // Giáo viên/admin xem toàn bộ lượt làm bài của một đề để theo dõi tiến độ học sinh.
   async listAttemptsForExam(examId: string, user: JwtPayload) {
     const exam = await this.findExamOrThrow(examId);
-    this.assertManageable(exam, user);
+    await this.assertTeacherOrAdminCanView(exam, user);
     return this.prisma.examAttempt.findMany({
       where: { examId },
       include: {
@@ -304,8 +479,8 @@ export class ExamsService {
     if (user.role === Role.STUDENT && attempt.studentId !== user.sub) {
       throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
     }
-    if (user.role === Role.TEACHER && attempt.exam.tenantId !== user.tenantId) {
-      throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
+    if (user.role === Role.TEACHER) {
+      await this.assertTeacherOrAdminCanView(attempt.exam, user);
     }
     if (attempt.status === AttemptStatus.IN_PROGRESS) {
       throw new BadRequestException(
@@ -313,20 +488,14 @@ export class ExamsService {
       );
     }
 
+    // AI chấm và công bố điểm ngay lập tức (kể cả tự luận Văn) — không còn
+    // trạng thái chờ giáo viên duyệt trước khi học sinh xem điểm/nhận xét AI.
+    // Giáo viên vẫn có thể điều chỉnh lại sau qua GradingService.reviewEssay.
     const answersByQuestionId = new Map(
       attempt.answers.map((a) => [a.questionId, a]),
     );
     return attempt.exam.examQuestions.map((eq) => {
       const answer = answersByQuestionId.get(eq.questionId);
-      // Bài Văn thuộc lớp giáo viên: điểm/nhận xét AI sơ bộ chỉ là dữ liệu nội bộ
-      // chờ giáo viên duyệt (xem GradingService.reviewEssay) — học sinh không được
-      // thấy trước khi có điểm chính thức, kể cả khi status đã chuyển SUBMITTED.
-      const pendingTeacherReview =
-        eq.question.type === QuestionType.ESSAY &&
-        answer != null &&
-        !answer.isAiReferenceOnly &&
-        answer.scoreAwarded === null;
-      const hideAiFeedback = user.role === Role.STUDENT && pendingTeacherReview;
       return {
         questionId: eq.questionId,
         content: eq.question.content,
@@ -338,10 +507,8 @@ export class ExamsService {
         response: answer?.response ?? null,
         isCorrect: answer?.isCorrect ?? null,
         scoreAwarded: answer?.scoreAwarded ?? null,
-        aiPreliminaryScore: hideAiFeedback
-          ? null
-          : (answer?.aiPreliminaryScore ?? null),
-        aiComment: hideAiFeedback ? null : (answer?.aiComment ?? null),
+        aiPreliminaryScore: answer?.aiPreliminaryScore ?? null,
+        aiComment: answer?.aiComment ?? null,
         isAiReferenceOnly: answer?.isAiReferenceOnly ?? false,
       };
     });

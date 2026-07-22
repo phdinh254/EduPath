@@ -55,6 +55,11 @@ enum RoadmapStatus {
   ARCHIVED
 }
 
+enum ExamCategory {
+  THPT // Thi tốt nghiệp THPT quốc gia — 1 môn/đề, thang điểm 10
+  DGNL // Đánh giá năng lực — nhiều môn/section trong 1 đề, thang điểm 150
+}
+
 // ---------- Core: User / Tenant / Class ----------
 
 model User {
@@ -217,10 +222,13 @@ model Question {
 // ---------- Exams ----------
 
 model Exam {
-  id       String  @id @default(cuid())
+  id       String       @id @default(cuid())
   title    String
-  subjectId String
-  subject   Subject @relation(fields: [subjectId], references: [id])
+  category ExamCategory @default(THPT)
+  // Bắt buộc với đề THPT (1 môn/đề). Đề ĐGNL gồm nhiều môn theo từng section
+  // nên để null ở cấp đề, môn học được xác định theo từng câu hỏi/section.
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id])
 
   // tenantId/classId = null nghĩa là đề chính thức/dùng chung
   tenantId String?
@@ -232,6 +240,7 @@ model Exam {
   createdBy       User    @relation("ExamCreatedBy", fields: [createdById], references: [id])
   durationMinutes Int
 
+  sections      ExamSection[]
   examQuestions ExamQuestion[]
   attempts      ExamAttempt[]
 
@@ -242,18 +251,37 @@ model Exam {
   @@index([tenantId])
 }
 
+// Chỉ dùng cho đề ĐGNL: chia đề thành nhiều phần thi (vd. Tư duy định lượng,
+// Tư duy định tính, Khoa học), mỗi phần có thang điểm riêng, tổng = 150.
+model ExamSection {
+  id       String @id @default(cuid())
+  examId   String
+  exam     Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  name     String
+  order    Int
+  maxScore Float
+
+  examQuestions ExamQuestion[]
+
+  @@index([examId])
+}
+
 // Join table: một câu hỏi có thể được tái sử dụng ở nhiều đề với thứ tự/điểm khác nhau.
 model ExamQuestion {
-  id         String   @id @default(cuid())
+  id         String       @id @default(cuid())
   examId     String
-  exam       Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  exam       Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
   questionId String
-  question   Question @relation(fields: [questionId], references: [id])
+  question   Question     @relation(fields: [questionId], references: [id])
+  // Chỉ có giá trị với đề ĐGNL — câu hỏi thuộc section nào.
+  sectionId  String?
+  section    ExamSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   order      Int
   maxScore   Float
 
   @@unique([examId, questionId])
   @@index([examId])
+  @@index([sectionId])
 }
 
 model ExamAttempt {

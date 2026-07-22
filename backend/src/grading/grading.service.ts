@@ -40,10 +40,6 @@ export class GradingService {
       throw new BadRequestException('Lượt làm bài đã được nộp trước đó');
     }
 
-    // Chấm tự luận Ngữ văn chỉ là "điểm tham khảo do AI đánh giá" khi học sinh tự học
-    // (đề không gắn với lớp học nào); nếu thuộc lớp giáo viên, chờ giáo viên duyệt.
-    const isSelfStudyExam = attempt.exam.classId === null;
-
     const answersByQuestionId = new Map(
       attempt.answers.map((a) => [a.questionId, a]),
     );
@@ -53,6 +49,10 @@ export class GradingService {
       const response = existingAnswer?.response ?? null;
 
       if (eq.question.type === QuestionType.ESSAY) {
+        // AI chấm và công bố điểm tự luận ngay lập tức, không chờ giáo viên
+        // duyệt trước (kể cả bài thuộc lớp giáo viên) — luôn gắn nhãn "điểm
+        // tham khảo do AI đánh giá" để minh bạch, giáo viên có thể điều chỉnh
+        // lại sau qua reviewEssay() mà không chặn học sinh xem điểm ngay.
         const { score, comment } = gradeEssayPlaceholder(response, eq.maxScore);
         await this.prisma.answer.upsert({
           where: {
@@ -64,14 +64,14 @@ export class GradingService {
             response: response ?? undefined,
             aiPreliminaryScore: score,
             aiComment: comment,
-            isAiReferenceOnly: isSelfStudyExam,
-            scoreAwarded: isSelfStudyExam ? score : null,
+            isAiReferenceOnly: true,
+            scoreAwarded: score,
           },
           update: {
             aiPreliminaryScore: score,
             aiComment: comment,
-            isAiReferenceOnly: isSelfStudyExam,
-            scoreAwarded: isSelfStudyExam ? score : null,
+            isAiReferenceOnly: true,
+            scoreAwarded: score,
           },
         });
         continue;
@@ -112,17 +112,46 @@ export class GradingService {
     return this.recomputeScore(attemptId);
   }
 
-  // Danh sách bài tự luận đã nộp, chờ giáo viên duyệt điểm AI chấm sơ bộ.
-  findPendingReview(user: JwtPayload) {
+  private async assertTeacherOrAdminCanReview(
+    examClassId: string | null,
+    user: JwtPayload,
+  ) {
+    if (user.role === Role.ADMIN) return;
+    if (!examClassId) {
+      throw new ForbiddenException('Bạn không có quyền duyệt bài này');
+    }
+    const klass = await this.prisma.class.findUnique({
+      where: { id: examClassId },
+    });
+    if (!klass || klass.tenantId !== user.tenantId) {
+      throw new ForbiddenException('Bạn không có quyền duyệt bài này');
+    }
+  }
+
+  // Danh sách câu tự luận AI đã chấm và công bố điểm, nhưng giáo viên/admin
+  // chưa điều chỉnh lại lần nào (chưa có TeacherReview) — dùng để giáo viên
+  // spot-check chất lượng AI, không còn là hàng chờ chặn công bố điểm.
+  async findPendingReview(user: JwtPayload) {
+    const examWhere =
+      user.role === Role.ADMIN
+        ? undefined
+        : {
+            classId: {
+              in: (
+                await this.prisma.class.findMany({
+                  where: { tenantId: user.tenantId },
+                  select: { id: true },
+                })
+              ).map((c) => c.id),
+            },
+          };
     return this.prisma.answer.findMany({
       where: {
         question: { type: QuestionType.ESSAY },
-        isAiReferenceOnly: false,
-        scoreAwarded: null,
+        teacherReview: null,
         attempt: {
-          status: AttemptStatus.SUBMITTED,
-          exam:
-            user.role === Role.ADMIN ? undefined : { tenantId: user.tenantId },
+          status: { in: [AttemptStatus.SUBMITTED, AttemptStatus.GRADED] },
+          exam: examWhere,
         },
       },
       include: {
@@ -138,6 +167,8 @@ export class GradingService {
     });
   }
 
+  // Giáo viên/admin điều chỉnh lại điểm AI đã công bố (hậu kiểm) — không còn
+  // chặn học sinh xem điểm ban đầu, chỉ ghi đè điểm chính thức nếu cần sửa.
   async reviewEssay(
     answerId: string,
     user: JwtPayload,
@@ -154,12 +185,7 @@ export class GradingService {
     if (answer.question.type !== QuestionType.ESSAY) {
       throw new BadRequestException('Chỉ áp dụng duyệt điểm cho câu tự luận');
     }
-    if (
-      user.role !== Role.ADMIN &&
-      answer.attempt.exam.tenantId !== user.tenantId
-    ) {
-      throw new ForbiddenException('Bạn không có quyền duyệt bài này');
-    }
+    await this.assertTeacherOrAdminCanReview(answer.attempt.exam.classId, user);
 
     const examQuestion = await this.prisma.examQuestion.findUnique({
       where: {
@@ -208,13 +234,16 @@ export class GradingService {
       0,
     );
 
-    const topicBreakdown: Record<string, { correct: number; total: number }> =
-      {};
+    const topicBreakdown: Record<
+      string,
+      { correct: number; total: number; subjectId: string }
+    > = {};
     for (const a of answers) {
       if (a.question.type === QuestionType.ESSAY) continue; // không tính vào tỷ lệ đúng/sai nhị phân
       const entry = topicBreakdown[a.question.topicId] ?? {
         correct: 0,
         total: 0,
+        subjectId: a.question.subjectId,
       };
       entry.total += 1;
       if (a.isCorrect) entry.correct += 1;
@@ -227,24 +256,14 @@ export class GradingService {
       update: { totalScore, topicBreakdown },
     });
 
-    const stillPendingReview = answers.some(
-      (a) =>
-        a.question.type === QuestionType.ESSAY &&
-        !a.isAiReferenceOnly &&
-        a.scoreAwarded === null,
-    );
-    const finalStatus = stillPendingReview
-      ? AttemptStatus.SUBMITTED
-      : AttemptStatus.GRADED;
+    // AI chấm và công bố điểm ngay cho mọi dạng câu (kể cả tự luận Văn) —
+    // không còn trạng thái SUBMITTED chờ giáo viên duyệt trước khi GRADED.
     await this.prisma.examAttempt.update({
       where: { id: attemptId },
-      data: { totalScore, status: finalStatus },
+      data: { totalScore, status: AttemptStatus.GRADED },
     });
 
-    // Chỉ phân tích điểm yếu và cập nhật lộ trình khi bài đã được chấm xong hoàn toàn.
-    if (finalStatus === AttemptStatus.GRADED) {
-      await this.roadmapService.generateForAttempt(attemptId);
-    }
+    await this.roadmapService.generateForAttempt(attemptId);
 
     return this.prisma.examAttempt.findUnique({
       where: { id: attemptId },
