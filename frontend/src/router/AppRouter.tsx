@@ -5,6 +5,7 @@ import { AppLayout } from '../components/AppLayout';
 import { LandingPage } from '../pages/LandingPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
+import { AuthCallbackPage } from '../pages/auth/AuthCallbackPage';
 
 import { StudentSubjectsPage } from '../pages/student/StudentSubjectsPage';
 import { StudentExamsPage } from '../pages/student/StudentExamsPage';
@@ -37,6 +38,7 @@ export function AppRouter() {
       <Route path="/" element={<RootRoute />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
       <Route element={<ProtectedRoute allowedRoles={['STUDENT']} />}>
         <Route element={<AppLayout />}>

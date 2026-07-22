@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Logo } from '../components/Logo';
 
 const FEATURES = [
   {
@@ -53,9 +54,7 @@ export function LandingPage() {
       {/* Nav */}
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 backdrop-blur dark:border-slate-800/80 dark:bg-slate-950/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
-          <span className="whitespace-nowrap text-base font-bold tracking-tight text-slate-900 sm:text-lg dark:text-white">
-            Lộ Trình 12 <span className="text-indigo-600 dark:text-indigo-400">AI</span>
-          </span>
+          <Logo size={28} />
           <nav className="flex items-center gap-1.5 sm:gap-3">
             <Link
               to="/login"
@@ -80,19 +79,19 @@ export function LandingPage() {
           className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[600px] bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(99,102,241,0.18),transparent)] dark:bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(99,102,241,0.28),transparent)]"
         />
         <div className="mx-auto flex max-w-4xl flex-col items-center px-6 pb-16 pt-16 text-center sm:pt-24">
-          <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-xs font-semibold text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300">
-            ✨ AI chấm điểm tức thời — không cần chờ, không cần lớp học
+          <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-amber-50 px-4 py-1.5 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+            🔥 Điểm chưa như ý? Đừng để nó tiếp diễn ở kỳ thi thật
           </span>
           <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-6xl dark:text-white">
-            Thi thử hôm nay,
+            Đang điểm thấp?
             <br />
             <span className="bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent">
-              biết điểm ngay lập tức
+              Ôn luyện ngay hôm nay.
             </span>
           </h1>
           <p className="mt-6 max-w-2xl text-base text-slate-600 sm:text-lg dark:text-slate-300">
-            Nền tảng luyện thi THPT quốc gia &amp; Đánh giá năng lực dùng AI: ra đề không giới hạn, chấm điểm
-            tức thời kể cả bài Văn, và tự vẽ lộ trình ôn tập đúng chỗ bạn đang yếu.
+            Mỗi ngày trì hoãn là một chuyên đề chưa kịp ôn. EduPath dùng AI ra đề không giới hạn, chấm điểm
+            tức thời kể cả bài Văn, và chỉ thẳng chỗ bạn đang yếu — để điểm số lần sau thật sự khác.
           </p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Link
@@ -130,7 +129,7 @@ export function LandingPage() {
       <section className="mx-auto max-w-6xl px-6 py-24">
         <div className="mb-12 text-center">
           <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">
-            Vì sao học sinh chọn Lộ Trình 12 AI?
+            Vì sao học sinh chọn EduPath?
           </h2>
           <p className="mt-3 text-slate-500 dark:text-slate-400">
             Mọi thứ bạn cần để tự tin bước vào phòng thi — không cần ai nhắc, không cần chờ ai duyệt.
@@ -204,7 +203,7 @@ export function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-slate-200 py-10 dark:border-slate-800">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 text-sm text-slate-400 sm:flex-row">
-          <span>© {new Date().getFullYear()} Lộ Trình 12 AI</span>
+          <span>© {new Date().getFullYear()} EduPath</span>
           <span>Đồng hành ôn thi THPT & Đánh giá năng lực cùng AI</span>
         </div>
       </footer>

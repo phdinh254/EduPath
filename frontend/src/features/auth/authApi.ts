@@ -36,3 +36,9 @@ export async function refreshRequest(refreshToken: string): Promise<AuthTokens> 
 export async function logoutRequest(refreshToken: string): Promise<void> {
   await apiClient.post('/auth/logout', { refreshToken });
 }
+
+// Điều hướng cả trang (không phải XHR) sang backend để bắt đầu luồng OAuth
+// Google — backend sẽ redirect tiếp sang Google rồi quay về /auth/callback.
+export function googleAuthUrl(): string {
+  return `${apiClient.defaults.baseURL}/auth/google`;
+}

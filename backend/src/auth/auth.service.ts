@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import type { GoogleProfile } from './strategies/google.strategy';
 
 interface JwtPayloadShape {
   sub: string;
@@ -55,6 +56,27 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user || !(await argon2.verify(user.passwordHash, dto.password))) {
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+    }
+    return this.buildTokens(user.id, user.email, user.role);
+  }
+
+  // Đăng nhập/đăng ký bằng Google: khớp theo email, tự tạo tài khoản STUDENT
+  // nếu chưa từng đăng ký (mật khẩu ngẫu nhiên không dùng tới vì tài khoản
+  // này chỉ đăng nhập qua Google). Email trùng với tài khoản đăng ký thường
+  // sẽ được coi là cùng một người và đăng nhập được luôn qua Google.
+  async loginWithGoogle(profile: GoogleProfile) {
+    let user = await this.usersService.findByEmail(profile.email);
+    if (!user) {
+      const passwordHash = (await argon2.hash(randomUUID())) as string;
+      user = await this.usersService.create({
+        email: profile.email,
+        passwordHash,
+        fullName: profile.fullName,
+        role: Role.STUDENT,
+      });
+    }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Tài khoản không còn hoạt động');
     }
     return this.buildTokens(user.id, user.email, user.role);
   }

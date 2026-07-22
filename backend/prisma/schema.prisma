@@ -1,4 +1,4 @@
-// Lộ Trình 12 AI — schema cơ sở dữ liệu chính
+// EduPath — schema cơ sở dữ liệu chính
 // Xem docs/PROJECT.md để biết đầy đủ ngữ cảnh nghiệp vụ
 
 generator client {

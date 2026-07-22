@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { setUnauthorizedHandler } from '../../lib/api-client';
-import type { UserProfile } from '../../types/api';
+import type { AuthTokens, UserProfile } from '../../types/api';
 import {
   fetchMe,
   loginRequest,
@@ -16,6 +16,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (payload: LoginPayload) => Promise<UserProfile>;
   register: (payload: RegisterPayload) => Promise<UserProfile>;
+  loginWithTokens: (tokens: AuthTokens) => Promise<UserProfile>;
   logout: () => void;
 }
 
@@ -55,8 +56,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const login = useCallback(async (payload: LoginPayload) => {
-    const tokens = await loginRequest(payload);
+  // Lưu token rồi tải hồ sơ — dùng chung cho login bằng mật khẩu, đăng ký,
+  // và luồng quay về từ Google OAuth (token đã cấp sẵn qua query string).
+  const applyTokens = useCallback(async (tokens: AuthTokens) => {
     localStorage.setItem('accessToken', tokens.accessToken);
     localStorage.setItem('refreshToken', tokens.refreshToken);
     const profile = await fetchMe();
@@ -64,17 +66,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return profile;
   }, []);
 
-  const register = useCallback(async (payload: RegisterPayload) => {
-    const tokens = await registerRequest(payload);
-    localStorage.setItem('accessToken', tokens.accessToken);
-    localStorage.setItem('refreshToken', tokens.refreshToken);
-    const profile = await fetchMe();
-    setUser(profile);
-    return profile;
-  }, []);
+  const login = useCallback(
+    async (payload: LoginPayload) => applyTokens(await loginRequest(payload)),
+    [applyTokens],
+  );
+
+  const register = useCallback(
+    async (payload: RegisterPayload) => applyTokens(await registerRequest(payload)),
+    [applyTokens],
+  );
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        login,
+        register,
+        loginWithTokens: applyTokens,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

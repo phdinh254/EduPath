@@ -1,15 +1,38 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { AuthGuard } from '@nestjs/passport';
+import {
+  ApiExcludeEndpoint,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { Public } from './decorators/public.decorator';
+import { GoogleConfiguredGuard } from './guards/google-configured.guard';
+import type { GoogleProfile } from './strategies/google.strategy';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Public()
   @Post('register')
@@ -45,6 +68,34 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Email hoặc mật khẩu không đúng.' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @UseGuards(GoogleConfiguredGuard, AuthGuard('google'))
+  @Get('google')
+  @ApiOperation({
+    summary: 'Bắt đầu đăng nhập/đăng ký bằng Google',
+    description:
+      'Công khai. Chuyển hướng sang màn hình đồng ý của Google — không gọi trực tiếp từ code, chỉ dùng làm href cho trình duyệt.',
+  })
+  @ApiResponse({ status: 302, description: 'Chuyển hướng sang Google.' })
+  googleAuth() {
+    // Passport tự động redirect sang Google trước khi vào tới đây.
+  }
+
+  @Public()
+  @UseGuards(GoogleConfiguredGuard, AuthGuard('google'))
+  @Get('google/callback')
+  @ApiExcludeEndpoint()
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
+    const profile = req.user as GoogleProfile;
+    const tokens = await this.authService.loginWithGoogle(profile);
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:5173';
+    const redirectUrl = new URL('/auth/callback', frontendUrl);
+    redirectUrl.searchParams.set('accessToken', tokens.accessToken);
+    redirectUrl.searchParams.set('refreshToken', tokens.refreshToken);
+    res.redirect(redirectUrl.toString());
   }
 
   @Public()

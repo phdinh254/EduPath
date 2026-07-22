@@ -1,6 +1,6 @@
-# Lộ Trình 12 AI
+# EduPath
 
-**Lộ Trình 12 AI** là hệ thống web luyện thi thử dành cho học sinh lớp 12 đang chuẩn bị cho kỳ thi tốt nghiệp THPT. Hệ thống giúp học sinh làm đề, luyện tập theo từng chuyên đề, theo dõi kết quả và nhận lộ trình ôn tập cá nhân hóa dựa trên trí tuệ nhân tạo.
+**EduPath** là hệ thống web luyện thi thử dành cho học sinh lớp 12 đang chuẩn bị cho kỳ thi tốt nghiệp THPT. Hệ thống giúp học sinh làm đề, luyện tập theo từng chuyên đề, theo dõi kết quả và nhận lộ trình ôn tập cá nhân hóa dựa trên trí tuệ nhân tạo.
 
 ## Mục tiêu dự án
 

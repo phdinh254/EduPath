@@ -1,4 +1,4 @@
-# Lộ Trình 12 AI
+# EduPath
 
 Hệ thống web luyện thi thử dành cho học sinh lớp 12 chuẩn bị kỳ thi tốt nghiệp THPT. Học sinh làm đề, luyện theo chuyên đề, xem kết quả và nhận lộ trình ôn tập cá nhân hóa. Giáo viên/trung tâm tạo lớp, quản lý học sinh, biên soạn đề riêng. Quản trị viên quản lý ngân hàng câu hỏi dùng chung và toàn hệ thống.
 

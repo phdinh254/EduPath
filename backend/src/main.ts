@@ -8,7 +8,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const config = new DocumentBuilder()
-    .setTitle('Lộ Trình 12 AI API')
+    .setTitle('EduPath API')
     .setDescription(
       'RESTful API cho hệ thống luyện thi thử THPT có lộ trình cá nhân hóa bằng AI',
     )
