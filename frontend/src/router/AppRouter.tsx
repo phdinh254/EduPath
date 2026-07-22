@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { AppLayout } from '../components/AppLayout';
+import { LandingPage } from '../pages/LandingPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 
@@ -20,10 +21,12 @@ import { AdminExamDetailPage } from '../pages/admin/AdminExamDetailPage';
 import { AdminPendingReviewPage } from '../pages/admin/AdminPendingReviewPage';
 import { AdminAuditLogsPage } from '../pages/admin/AdminAuditLogsPage';
 
-function HomeRedirect() {
+// Khách chưa đăng nhập thấy trang giới thiệu; đã đăng nhập thì vào thẳng
+// trang chủ theo vai trò của mình.
+function RootRoute() {
   const { user, isLoading } = useAuth();
   if (isLoading) return null;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <LandingPage />;
   const home = { STUDENT: '/student', ADMIN: '/admin' }[user.role];
   return <Navigate to={home} replace />;
 }
@@ -31,7 +34,7 @@ function HomeRedirect() {
 export function AppRouter() {
   return (
     <Routes>
-      <Route path="/" element={<HomeRedirect />} />
+      <Route path="/" element={<RootRoute />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
 
