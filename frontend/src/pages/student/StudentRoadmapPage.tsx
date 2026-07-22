@@ -3,6 +3,8 @@ import { fetchMyRoadmap, fetchMyWeaknesses } from '../../features/roadmap/roadma
 import { fetchSubjects } from '../../features/subjects/subjectsApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import { Card, PageHeader } from '../../components/ui/Card';
+import { AwardIcon, CheckCircleIcon, RouteIcon, SparklesIcon, TargetIcon } from '../../components/ui/Icons';
 
 const STAGE_LABEL: Record<string, string> = {
   REVIEW_THEORY: 'Ôn lý thuyết nền tảng',
@@ -22,9 +24,12 @@ export function StudentRoadmapPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-xl font-semibold text-slate-900 dark:text-slate-100">
-        Điểm yếu &amp; lộ trình ôn tập AI
-      </h1>
+      <PageHeader
+        title="Điểm yếu & lộ trình ôn tập AI"
+        subtitle="Phân tích tự động sau mỗi bài thi, kèm lời khuyên ôn tập do AI viết riêng cho bạn"
+        icon={<RouteIcon className="h-5 w-5" />}
+      />
+
       {isLoading && <LoadingState />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}
 
@@ -32,25 +37,43 @@ export function StudentRoadmapPage() {
         <EmptyState label="Chưa có phân tích điểm yếu nào. Hãy làm ít nhất một bài thi để AI phân tích." />
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {weaknessesQuery.data?.map((analysis) => (
-          <div key={analysis.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-            <p className="mb-2 font-medium text-slate-900 dark:text-slate-100">
-              {subjectNameById.get(analysis.subjectId) ?? 'Môn học'} — phân tích ngày{' '}
-              {new Date(analysis.generatedAt).toLocaleDateString('vi-VN')}
-            </p>
+          <Card key={analysis.id} className="p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-amber-500/30">
+                <TargetIcon className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">
+                  {subjectNameById.get(analysis.subjectId) ?? 'Môn học'}
+                </p>
+                <p className="text-xs text-slate-400">
+                  Phân tích ngày {new Date(analysis.generatedAt).toLocaleDateString('vi-VN')}
+                </p>
+              </div>
+            </div>
             {analysis.weakTopics.length === 0 ? (
-              <p className="text-sm text-emerald-600">Không phát hiện chuyên đề yếu trong lần này.</p>
+              <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+                <CheckCircleIcon className="h-4 w-4" />
+                Không phát hiện chuyên đề yếu trong lần này.
+              </p>
             ) : (
-              <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+              <ul className="space-y-3">
                 {analysis.weakTopics.map((wt) => {
                   const advice = analysis.details?.adviceByTopic?.[wt.topicId];
                   return (
-                    <li key={wt.topicId} className="list-disc pl-5">
-                      Chuyên đề cần ôn tập ưu tiên — đúng {wt.correct}/{wt.total} câu
+                    <li
+                      key={wt.topicId}
+                      className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/50 dark:bg-amber-500/5"
+                    >
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                        Chuyên đề cần ôn tập ưu tiên — đúng {wt.correct}/{wt.total} câu
+                      </p>
                       {advice && (
-                        <p className="mt-1 rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                          🤖 {advice}
+                        <p className="mt-2 flex items-start gap-2 rounded-lg bg-white/70 p-2.5 text-xs text-slate-600 dark:bg-slate-900/50 dark:text-slate-400">
+                          <SparklesIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" />
+                          {advice}
                         </p>
                       )}
                     </li>
@@ -58,31 +81,37 @@ export function StudentRoadmapPage() {
                 })}
               </ul>
             )}
-          </div>
+          </Card>
         ))}
       </div>
 
-      <h2 className="mb-4 mt-8 text-lg font-semibold text-slate-900 dark:text-slate-100">Lộ trình đang thực hiện</h2>
+      <h2 className="mb-4 mt-10 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+        <AwardIcon className="h-5 w-5 text-indigo-500" />
+        Lộ trình đang thực hiện
+      </h2>
       {roadmapQuery.data && roadmapQuery.data.length === 0 && (
         <EmptyState label="Chưa có lộ trình ôn tập nào được tạo." />
       )}
       <div className="space-y-4">
         {roadmapQuery.data?.map((roadmap) => (
-          <div key={roadmap.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-            <p className="mb-3 font-medium text-slate-900 dark:text-slate-100">
+          <Card key={roadmap.id} className="p-5">
+            <p className="mb-4 font-semibold text-slate-900 dark:text-slate-100">
               {subjectNameById.get(roadmap.subjectId) ?? 'Môn học'}
             </p>
-            <ol className="space-y-2">
+            <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {roadmap.stages.map((stage, index) => (
-                <li key={index} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs dark:bg-slate-800">
+                <li
+                  key={index}
+                  className="flex items-center gap-2.5 rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white">
                     {index + 1}
                   </span>
                   {STAGE_LABEL[stage.stage] ?? stage.stage}
                 </li>
               ))}
             </ol>
-          </div>
+          </Card>
         ))}
       </div>
     </div>

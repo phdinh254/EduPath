@@ -6,6 +6,8 @@ import { fetchQuestions } from '../../features/questions/questionsApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import { Badge, Button, Card } from '../../components/ui/Card';
+import { ClockIcon, FileTextIcon } from '../../components/ui/Icons';
 
 export function AdminExamDetailPage() {
   const { examId } = useParams<{ examId: string }>();
@@ -54,27 +56,41 @@ export function AdminExamDetailPage() {
 
   return (
     <div>
-      <h1 className="mb-1 text-xl font-semibold text-slate-900 dark:text-slate-100">{examQuery.data?.title}</h1>
-      <p className="mb-6 text-sm text-slate-500">{examQuery.data?.durationMinutes} phút</p>
+      <div className="mb-8 flex items-center gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30">
+          <FileTextIcon className="h-5 w-5" />
+        </span>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+            {examQuery.data?.title}
+          </h1>
+          <p className="mt-0.5 flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
+            <ClockIcon className="h-3.5 w-3.5" />
+            {examQuery.data?.durationMinutes} phút
+          </p>
+        </div>
+      </div>
 
-      <h2 className="mb-3 text-lg font-medium text-slate-900 dark:text-slate-100">Câu hỏi trong đề</h2>
+      <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Câu hỏi trong đề</h2>
       {examQuestionsQuery.isLoading && <LoadingState />}
       {examQuestionsQuery.data && examQuestionsQuery.data.length === 0 && (
         <EmptyState label="Đề thi chưa có câu hỏi nào." />
       )}
       <div className="mb-6 space-y-2">
         {examQuestionsQuery.data?.map((eq) => (
-          <div key={eq.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800">
-            Câu {eq.order} ({eq.maxScore} điểm): {eq.question.content}
-          </div>
+          <Card key={eq.id} className="flex items-center gap-3 p-3 text-sm">
+            <Badge>Câu {eq.order}</Badge>
+            <span className="text-slate-700 dark:text-slate-300">{eq.question.content}</span>
+            <span className="ml-auto shrink-0 text-xs text-slate-400">{eq.maxScore} điểm</span>
+          </Card>
         ))}
       </div>
 
-      <form onSubmit={handleAdd} className="mb-8 flex max-w-xl gap-2">
+      <form onSubmit={handleAdd} className="mb-8 flex max-w-xl flex-col gap-2 sm:flex-row">
         <select
           value={questionId}
           onChange={(e) => setQuestionId(e.target.value)}
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
         >
           <option value="">Chọn câu hỏi đã duyệt để thêm vào đề</option>
           {availableQuestions.map((q) => (
@@ -89,19 +105,15 @@ export function AdminExamDetailPage() {
           min={0}
           value={maxScore}
           onChange={(e) => setMaxScore(Number(e.target.value))}
-          className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm sm:w-24 dark:border-slate-700 dark:bg-slate-900"
         />
-        <button
-          type="submit"
-          disabled={addMutation.isPending}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
-        >
+        <Button type="submit" disabled={addMutation.isPending}>
           Thêm
-        </button>
+        </Button>
       </form>
       {formError && <ErrorState message={formError} />}
 
-      <h2 className="mb-3 text-lg font-medium text-slate-900 dark:text-slate-100">Kết quả học sinh</h2>
+      <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Kết quả học sinh</h2>
       {attemptsQuery.isLoading && <LoadingState />}
       {attemptsQuery.error && <ErrorState message={getApiErrorMessage(attemptsQuery.error)} />}
       {attemptsQuery.data && attemptsQuery.data.length === 0 && (
@@ -109,15 +121,14 @@ export function AdminExamDetailPage() {
       )}
       <div className="space-y-2">
         {attemptsQuery.data?.map((attempt) => (
-          <div
-            key={attempt.id}
-            className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"
-          >
-            <span>{attempt.student?.fullName}</span>
-            <span className="text-slate-500">
-              {attempt.status === 'IN_PROGRESS' ? 'Đang làm bài' : `${attempt.totalScore?.toFixed(2)} điểm`}
-            </span>
-          </div>
+          <Card key={attempt.id} className="flex items-center justify-between p-3 text-sm">
+            <span className="text-slate-700 dark:text-slate-300">{attempt.student?.fullName}</span>
+            {attempt.status === 'IN_PROGRESS' ? (
+              <Badge variant="amber">Đang làm bài</Badge>
+            ) : (
+              <Badge variant="emerald">{attempt.totalScore?.toFixed(2)} điểm</Badge>
+            )}
+          </Card>
         ))}
       </div>
     </div>

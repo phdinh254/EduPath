@@ -12,6 +12,8 @@ import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { Modal } from '../../components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import { Badge, Button, Card, PageHeader } from '../../components/ui/Card';
+import { HelpCircleIcon } from '../../components/ui/Icons';
 import type { ContentStatus, DifficultyLevel, Question, QuestionType } from '../../types/api';
 
 const TABS: { value: ContentStatus | ''; label: string }[] = [
@@ -360,33 +362,29 @@ export function AdminQuestionsPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Câu hỏi</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowGenerate(true)}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium dark:border-slate-700"
-          >
-            + AI sinh câu hỏi
-          </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-slate-900"
-          >
-            + Tạo thủ công
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Câu hỏi"
+        subtitle="Ngân hàng câu hỏi dùng chung — tạo thủ công hoặc để AI tự soạn nội dung mới"
+        icon={<HelpCircleIcon className="h-5 w-5" />}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setShowGenerate(true)}>
+              + AI sinh câu hỏi
+            </Button>
+            <Button onClick={() => setShowCreate(true)}>+ Tạo thủ công</Button>
+          </>
+        }
+      />
 
-      <div className="mb-6 flex gap-2 text-sm">
+      <div className="mb-6 flex flex-wrap gap-2 text-sm">
         {TABS.map((tab) => (
           <button
             key={tab.value}
             onClick={() => setStatus(tab.value)}
-            className={`rounded-lg border px-3 py-1.5 ${
+            className={`rounded-xl border px-3.5 py-1.5 font-medium transition ${
               status === tab.value
-                ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-                : 'border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-400'
+                ? 'border-transparent bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm'
+                : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
             }`}
           >
             {tab.label}
@@ -400,8 +398,16 @@ export function AdminQuestionsPage() {
 
       <div className="space-y-3">
         {data?.map((q) => (
-          <div key={q.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-            <p className="mb-1 font-medium text-slate-900 dark:text-slate-100">{q.content}</p>
+          <Card key={q.id} className="p-4">
+            <div className="mb-1 flex items-start justify-between gap-3">
+              <p className="font-medium text-slate-900 dark:text-slate-100">{q.content}</p>
+              <Badge
+                variant={q.status === 'APPROVED' ? 'emerald' : q.status === 'REJECTED' ? 'red' : 'amber'}
+                className="shrink-0"
+              >
+                {q.status === 'APPROVED' ? 'Đã duyệt' : q.status === 'REJECTED' ? 'Bị từ chối' : 'Chờ duyệt'}
+              </Badge>
+            </div>
             <p className="mb-2 text-xs text-slate-500">{TYPE_LABEL[q.type]}</p>
             {q.status === 'REJECTED' && q.rejectReason && (
               <p className="mb-2 text-xs text-red-600 dark:text-red-400">Lý do từ chối: {q.rejectReason}</p>
@@ -409,23 +415,21 @@ export function AdminQuestionsPage() {
             {(q.status === 'PENDING_APPROVAL' || q.status === 'APPROVED') && (
               <div className="flex gap-2">
                 {q.status === 'PENDING_APPROVAL' && (
-                  <button
+                  <Button
+                    variant="success"
                     onClick={() => approveMutation.mutate(q.id)}
                     disabled={approveMutation.isPending}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                    className="px-3 py-1.5 text-xs"
                   >
                     Duyệt
-                  </button>
+                  </Button>
                 )}
-                <button
-                  onClick={() => setRejecting(q)}
-                  className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white"
-                >
+                <Button variant="danger" onClick={() => setRejecting(q)} className="px-3 py-1.5 text-xs">
                   {q.status === 'APPROVED' ? 'Rút khỏi kho chung' : 'Từ chối'}
-                </button>
+                </Button>
               </div>
             )}
-          </div>
+          </Card>
         ))}
       </div>
 

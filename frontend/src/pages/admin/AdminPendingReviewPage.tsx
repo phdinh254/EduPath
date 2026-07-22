@@ -5,6 +5,8 @@ import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { Modal } from '../../components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import { Badge, Button, Card, PageHeader } from '../../components/ui/Card';
+import { ClipboardCheckIcon, SparklesIcon } from '../../components/ui/Icons';
 import type { PendingReviewAnswer } from '../../types/api';
 
 export function AdminPendingReviewPage() {
@@ -42,38 +44,40 @@ export function AdminPendingReviewPage() {
 
   return (
     <div>
-      <h1 className="mb-2 text-xl font-semibold text-slate-900 dark:text-slate-100">Hậu kiểm điểm Văn</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        AI đã chấm và công bố điểm cho học sinh — đây là danh sách để bạn spot-check chất lượng AI và điều chỉnh nếu cần.
-      </p>
+      <PageHeader
+        title="Hậu kiểm điểm Văn"
+        subtitle="AI đã chấm và công bố điểm cho học sinh — spot-check chất lượng AI và điều chỉnh nếu cần"
+        icon={<ClipboardCheckIcon className="h-5 w-5" />}
+      />
       {isLoading && <LoadingState />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}
       {data && data.length === 0 && <EmptyState label="Không có bài nào cần hậu kiểm." />}
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {data?.map((answer) => (
-          <div key={answer.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-            <div className="mb-2 flex items-center justify-between">
+          <Card key={answer.id} className="p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="font-medium text-slate-900 dark:text-slate-100">
                   {answer.attempt.student.fullName} — {answer.attempt.exam.title}
                 </p>
                 <p className="text-xs text-slate-500">Đề bài: {answer.question.content}</p>
               </div>
-              <button
-                onClick={() => openReview(answer)}
-                className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-white dark:text-slate-900"
-              >
+              <Button onClick={() => openReview(answer)} className="shrink-0 px-3 py-1.5 text-xs">
                 Điều chỉnh điểm
-              </button>
+              </Button>
             </div>
-            <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+            <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-400">
               {(answer.response as { text?: string } | null)?.text ?? '(không có nội dung)'}
             </p>
-            <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-              AI chấm: {answer.scoreAwarded ?? answer.aiPreliminaryScore} điểm (điểm tham khảo do AI đánh giá) — {answer.aiComment}
+            <p className="mt-2 flex items-center gap-2 text-xs">
+              <Badge variant="amber">
+                <SparklesIcon className="h-3 w-3" />
+                AI chấm: {answer.scoreAwarded ?? answer.aiPreliminaryScore} điểm
+              </Badge>
+              <span className="text-slate-500 dark:text-slate-400">{answer.aiComment}</span>
             </p>
-          </div>
+          </Card>
         ))}
       </div>
 

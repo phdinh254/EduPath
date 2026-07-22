@@ -12,6 +12,8 @@ import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { Modal } from '../../components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import { Badge, Button, CardLink, PageHeader } from '../../components/ui/Card';
+import { ClockIcon, FileTextIcon } from '../../components/ui/Icons';
 import type { DifficultyLevel, ExamCategory, QuestionType } from '../../types/api';
 
 const TYPE_LABEL: Record<QuestionType, string> = {
@@ -299,41 +301,43 @@ export function AdminExamsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Đề thi</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowGenerate(true)}
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium dark:border-slate-700"
-          >
-            + AI ghép đề
-          </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-slate-900"
-          >
-            + Tạo đề thủ công
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Đề thi"
+        subtitle="Ghép đề tự động bằng AI hoặc tạo đề rỗng để thêm câu hỏi thủ công"
+        icon={<FileTextIcon className="h-5 w-5" />}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setShowGenerate(true)}>
+              + AI ghép đề
+            </Button>
+            <Button onClick={() => setShowCreate(true)}>+ Tạo đề thủ công</Button>
+          </>
+        }
+      />
 
       {examsQuery.isLoading && <LoadingState />}
       {examsQuery.error && <ErrorState message={getApiErrorMessage(examsQuery.error)} />}
       {examsQuery.data && examsQuery.data.length === 0 && <EmptyState label="Chưa có đề thi nào." />}
 
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {examsQuery.data?.map((exam) => (
-          <Link
-            key={exam.id}
-            to={`/admin/exams/${exam.id}`}
-            className="block rounded-lg border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
-          >
-            <p className="font-medium text-slate-900 dark:text-slate-100">{exam.title}</p>
-            <p className="text-xs text-slate-500">
-              {CATEGORY_LABEL[exam.category]} ·{' '}
-              {exam.subjectId ? (subjectNameById.get(exam.subjectId) ?? 'Môn học') : 'Nhiều môn'} ·{' '}
-              {exam.durationMinutes} phút
-            </p>
+          <Link key={exam.id} to={`/admin/exams/${exam.id}`}>
+            <CardLink className="flex h-full flex-col gap-3 p-5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{exam.title}</p>
+                <Badge variant={exam.category === 'DGNL' ? 'violet' : 'indigo'}>{CATEGORY_LABEL[exam.category]}</Badge>
+              </div>
+              <div className="mt-auto flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1">
+                  <FileTextIcon className="h-3.5 w-3.5" />
+                  {exam.subjectId ? (subjectNameById.get(exam.subjectId) ?? 'Môn học') : 'Nhiều môn'}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <ClockIcon className="h-3.5 w-3.5" />
+                  {exam.durationMinutes} phút
+                </span>
+              </div>
+            </CardLink>
           </Link>
         ))}
       </div>

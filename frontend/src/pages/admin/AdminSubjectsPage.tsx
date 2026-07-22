@@ -13,6 +13,8 @@ import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { Modal } from '../../components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import { Badge, Button, Card, PageHeader } from '../../components/ui/Card';
+import { BookIcon, ChevronDownIcon, LayersIcon } from '../../components/ui/Icons';
 import type { DifficultyLevel, QuestionType } from '../../types/api';
 
 const TYPE_LABEL: Record<QuestionType, string> = {
@@ -92,13 +94,13 @@ function ExamStructurePanel({ subjectId }: { subjectId: string }) {
   );
 
   return (
-    <div className="mt-4 border-t border-slate-200 pt-3 dark:border-slate-800">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-900 dark:text-slate-100">Cấu trúc đề cố định (THPT)</h3>
+    <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Cấu trúc đề cố định (THPT)</h3>
         {!editing && (
           <button
             onClick={startEditing}
-            className="rounded-lg border border-slate-300 px-3 py-1 text-xs dark:border-slate-700"
+            className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             {structureQuery.data ? 'Sửa' : '+ Khai báo cấu trúc'}
           </button>
@@ -108,17 +110,18 @@ function ExamStructurePanel({ subjectId }: { subjectId: string }) {
       {structureQuery.isLoading && <LoadingState label="Đang tải cấu trúc đề..." />}
 
       {!editing && structureQuery.data && (
-        <div className="space-y-1 text-xs text-slate-600 dark:text-slate-400">
+        <div className="space-y-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/50 dark:text-slate-400">
           <p>Thời gian làm bài mặc định: {structureQuery.data.durationMinutes} phút</p>
-          <ul className="list-disc pl-5">
+          <ul className="space-y-1">
             {structureQuery.data.items.map((item) => (
-              <li key={item.id}>
+              <li key={item.id} className="flex items-center gap-1.5">
+                <LayersIcon className="h-3 w-3 shrink-0 text-indigo-500" />
                 {TYPE_LABEL[item.type]} · {DIFFICULTY_LABEL[item.difficulty]}: {item.questionCount} câu ×{' '}
                 {item.maxScorePerQuestion}đ
               </li>
             ))}
           </ul>
-          <p>Tổng điểm đề: {totalScore}</p>
+          <p className="font-medium text-slate-700 dark:text-slate-300">Tổng điểm đề: {totalScore}</p>
         </div>
       )}
 
@@ -137,13 +140,13 @@ function ExamStructurePanel({ subjectId }: { subjectId: string }) {
               min={1}
               value={durationMinutes}
               onChange={(e) => setDurationMinutes(Number(e.target.value))}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
             />
           </label>
 
           <div className="space-y-2">
             {items.map((item, i) => (
-              <div key={i} className="grid grid-cols-5 items-center gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-800">
+              <div key={i} className="grid grid-cols-5 items-center gap-2 rounded-xl border border-slate-200 p-2 dark:border-slate-800">
                 <select
                   value={item.type}
                   onChange={(e) => updateItem(i, { type: e.target.value as QuestionType })}
@@ -197,26 +200,18 @@ function ExamStructurePanel({ subjectId }: { subjectId: string }) {
           <button
             type="button"
             onClick={addItem}
-            className="rounded-lg border border-slate-300 px-3 py-1 text-xs dark:border-slate-700"
+            className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             + Thêm dạng câu
           </button>
 
           <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={saveMutation.isPending || items.length === 0}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
-            >
+            <Button type="submit" disabled={saveMutation.isPending || items.length === 0}>
               {saveMutation.isPending ? 'Đang lưu...' : 'Lưu cấu trúc'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm dark:border-slate-700"
-            >
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
               Huỷ
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -247,26 +242,34 @@ function TopicsPanel({ subjectId }: { subjectId: string }) {
   }
 
   return (
-    <div className="mt-3">
+    <div>
       {isLoading && <LoadingState label="Đang tải chuyên đề..." />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}
       {data && data.length === 0 && <EmptyState label="Chưa có chuyên đề." />}
-      <ul className="mb-3 list-disc pl-5 text-sm text-slate-600 dark:text-slate-400">
-        {data?.map((t) => (
-          <li key={t.id}>{t.name}</li>
-        ))}
-      </ul>
+      {data && data.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {data.map((t) => (
+            <span
+              key={t.id}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-50 px-3 py-1.5 text-sm text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300"
+            >
+              <LayersIcon className="h-3.5 w-3.5" />
+              {t.name}
+            </span>
+          ))}
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
           value={topicName}
           onChange={(e) => setTopicName(e.target.value)}
           placeholder="Tên chuyên đề mới"
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+          className="flex-1 rounded-xl border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
         />
         <button
           type="submit"
           disabled={createTopicMutation.isPending}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700"
+          className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
           Thêm
         </button>
@@ -306,38 +309,45 @@ export function AdminSubjectsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Môn học &amp; chuyên đề</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-slate-900"
-        >
-          + Tạo môn học
-        </button>
-      </div>
+      <PageHeader
+        title="Môn học & chuyên đề"
+        subtitle="Quản lý môn học, chuyên đề và cấu trúc đề cố định dùng cho AI ghép đề"
+        icon={<BookIcon className="h-5 w-5" />}
+        actions={<Button onClick={() => setShowCreate(true)}>+ Tạo môn học</Button>}
+      />
 
       {isLoading && <LoadingState />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}
       {data && data.length === 0 && <EmptyState label="Chưa có môn học nào." />}
 
       <div className="space-y-3">
-        {data?.map((subject) => (
-          <div key={subject.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-            <button
-              onClick={() => setExpanded(expanded === subject.id ? null : subject.id)}
-              className="flex w-full items-center justify-between text-left font-medium text-slate-900 dark:text-slate-100"
-            >
-              {subject.name} ({subject.code})
-              <span className="text-slate-400">{expanded === subject.id ? '−' : '+'}</span>
-            </button>
-            {expanded === subject.id && (
-              <>
-                <TopicsPanel subjectId={subject.id} />
-                <ExamStructurePanel subjectId={subject.id} />
-              </>
-            )}
-          </div>
-        ))}
+        {data?.map((subject) => {
+          const isOpen = expanded === subject.id;
+          return (
+            <Card key={subject.id} className="p-0">
+              <button
+                onClick={() => setExpanded(isOpen ? null : subject.id)}
+                className="flex w-full items-center gap-3 p-4 text-left"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-sm">
+                  <BookIcon className="h-4 w-4" />
+                </span>
+                <span className="flex-1 font-medium text-slate-900 dark:text-slate-100">
+                  {subject.name} <Badge>{subject.code}</Badge>
+                </span>
+                <ChevronDownIcon
+                  className={`h-5 w-5 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {isOpen && (
+                <div className="border-t border-slate-100 p-4 dark:border-slate-800">
+                  <TopicsPanel subjectId={subject.id} />
+                  <ExamStructurePanel subjectId={subject.id} />
+                </div>
+              )}
+            </Card>
+          );
+        })}
       </div>
 
       {showCreate && (
@@ -348,23 +358,19 @@ export function AdminSubjectsPage() {
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="Mã môn (ví dụ: TOAN)"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              className="rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
             />
             <input
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Tên môn học"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              className="rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
             />
             {formError && <ErrorState message={formError} />}
-            <button
-              type="submit"
-              disabled={createMutation.isPending}
-              className="rounded-lg bg-slate-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
-            >
+            <Button type="submit" disabled={createMutation.isPending}>
               {createMutation.isPending ? 'Đang tạo...' : 'Tạo môn học'}
-            </button>
+            </Button>
           </form>
         </Modal>
       )}
