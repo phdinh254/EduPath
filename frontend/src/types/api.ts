@@ -1,10 +1,10 @@
-export type Role = 'STUDENT' | 'TEACHER' | 'ADMIN';
+export type Role = 'STUDENT' | 'ADMIN';
 
 export type QuestionType = 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'ESSAY';
 export type DifficultyLevel = 'KNOWLEDGE' | 'COMPREHENSION' | 'APPLICATION' | 'HIGH_APPLICATION';
-export type ContentStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+export type ContentStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
 export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED' | 'GRADED';
-export type StudentClassStatus = 'ACTIVE' | 'REMOVED';
+export type ExamCategory = 'THPT' | 'DGNL';
 
 export interface AuthTokens {
   accessToken: string;
@@ -18,7 +18,6 @@ export interface UserProfile {
   role: Role;
   isActive: boolean;
   createdAt: string;
-  ownedTenant: { id: string; name: string } | null;
 }
 
 export interface Subject {
@@ -36,28 +35,6 @@ export interface Topic {
   createdAt: string;
 }
 
-export interface SchoolClass {
-  id: string;
-  tenantId: string;
-  name: string;
-  inviteCode: string;
-  isPublic: boolean;
-  createdAt: string;
-  updatedAt: string;
-  tenant?: { name: string };
-}
-
-export interface StudentClassLink {
-  id: string;
-  studentId: string;
-  classId: string;
-  status: StudentClassStatus;
-  joinedAt: string;
-  removedAt: string | null;
-  class?: SchoolClass;
-  student?: { id: string; fullName: string; email: string };
-}
-
 export interface Question {
   id: string;
   subjectId: string;
@@ -68,10 +45,9 @@ export interface Question {
   options: unknown;
   correctAnswer: unknown;
   explanation: string | null;
-  tenantId: string | null;
   createdById: string;
-  isGlobal: boolean;
   status: ContentStatus;
+  rejectReason: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,19 +55,28 @@ export interface Question {
 export interface Exam {
   id: string;
   title: string;
-  subjectId: string;
-  tenantId: string | null;
-  classId: string | null;
+  category: ExamCategory;
+  subjectId: string | null;
   createdById: string;
   durationMinutes: number;
   createdAt: string;
   updatedAt: string;
+  sections?: ExamSection[];
+}
+
+export interface ExamSection {
+  id: string;
+  examId: string;
+  name: string;
+  order: number;
+  maxScore: number;
 }
 
 export interface ExamQuestion {
   id: string;
   examId: string;
   questionId: string;
+  sectionId: string | null;
   order: number;
   maxScore: number;
   question: Partial<Question> & { id: string; type: QuestionType; content: string };
@@ -115,7 +100,7 @@ export interface Score {
   id: string;
   attemptId: string;
   totalScore: number;
-  topicBreakdown: Record<string, { correct: number; total: number }>;
+  topicBreakdown: Record<string, { correct: number; total: number; subjectId: string }>;
   gradedAt: string;
 }
 
@@ -182,24 +167,12 @@ export interface PendingReviewAnswer extends Answer {
   attempt: ExamAttempt & { student: { id: string; fullName: string; email: string }; exam: { id: string; title: string } };
 }
 
-export interface Tenant {
-  id: string;
-  name: string;
-  ownerId: string;
-  createdAt: string;
-  updatedAt: string;
-  owner: { id: string; fullName: string; email: string };
-  _count: { classes: number; questions: number; exams: number };
-}
-
 export interface AdminStats {
   totalStudents: number;
-  totalTeachers: number;
-  totalTenants: number;
   totalSubjects: number;
   totalExams: number;
   totalAttempts: number;
-  questionsByStatus: { draft: number; pendingApproval: number; approved: number; rejected: number };
+  questionsByStatus: { pendingApproval: number; approved: number; rejected: number };
 }
 
 export interface AuditLog {

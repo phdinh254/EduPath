@@ -12,6 +12,14 @@ export interface CreateQuestionPayload {
   explanation?: string;
 }
 
+export interface GenerateQuestionsPayload {
+  subjectId: string;
+  topicId: string;
+  type: QuestionType;
+  difficulty: DifficultyLevel;
+  count: number;
+}
+
 export async function fetchQuestions(status?: ContentStatus): Promise<Question[]> {
   const { data } = await apiClient.get<Question[]>('/questions', { params: status ? { status } : undefined });
   return data;
@@ -22,8 +30,9 @@ export async function createQuestion(payload: CreateQuestionPayload): Promise<Qu
   return data;
 }
 
-export async function proposeQuestion(id: string): Promise<Question> {
-  const { data } = await apiClient.post<Question>(`/questions/${id}/propose`);
+// AI sinh một lô câu hỏi mới, vào hàng chờ PENDING_APPROVAL chờ ADMIN duyệt.
+export async function generateQuestions(payload: GenerateQuestionsPayload): Promise<Question[]> {
+  const { data } = await apiClient.post<Question[]>('/questions/generate', payload);
   return data;
 }
 

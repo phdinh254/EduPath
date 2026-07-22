@@ -7,7 +7,7 @@ import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
 
-export function TeacherExamDetailPage() {
+export function AdminExamDetailPage() {
   const { examId } = useParams<{ examId: string }>();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -21,7 +21,10 @@ export function TeacherExamDetailPage() {
     queryFn: () => fetchExamQuestions(examId!),
     enabled: !!examId,
   });
-  const questionBankQuery = useQuery({ queryKey: ['questions'], queryFn: () => fetchQuestions() });
+  const questionBankQuery = useQuery({
+    queryKey: ['admin-questions', 'APPROVED'],
+    queryFn: () => fetchQuestions('APPROVED'),
+  });
   const attemptsQuery = useQuery({
     queryKey: ['exam-attempts', examId],
     queryFn: () => fetchExamAttempts(examId!),
@@ -73,7 +76,7 @@ export function TeacherExamDetailPage() {
           onChange={(e) => setQuestionId(e.target.value)}
           className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
         >
-          <option value="">Chọn câu hỏi để thêm vào đề</option>
+          <option value="">Chọn câu hỏi đã duyệt để thêm vào đề</option>
           {availableQuestions.map((q) => (
             <option key={q.id} value={q.id}>
               {q.content.slice(0, 60)}
@@ -112,11 +115,7 @@ export function TeacherExamDetailPage() {
           >
             <span>{attempt.student?.fullName}</span>
             <span className="text-slate-500">
-              {attempt.status === 'IN_PROGRESS'
-                ? 'Đang làm bài'
-                : attempt.status === 'SUBMITTED'
-                  ? 'Chờ duyệt điểm Văn'
-                  : `${attempt.totalScore?.toFixed(2)} điểm`}
+              {attempt.status === 'IN_PROGRESS' ? 'Đang làm bài' : `${attempt.totalScore?.toFixed(2)} điểm`}
             </span>
           </div>
         ))}

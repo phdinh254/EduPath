@@ -4,12 +4,11 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: Role;
-  tenantId?: string;
   exp: number;
   iat: number;
 }
 
-// Chỉ dùng để đọc thông tin hiển thị (role, tenantId) phía client cho việc điều hướng.
+// Chỉ dùng để đọc thông tin hiển thị (role) phía client cho việc điều hướng.
 // KHÔNG dùng để quyết định quyền truy cập dữ liệu - mọi kiểm tra quyền thật sự nằm ở backend.
 export function decodeJwt(token: string): JwtPayload | null {
   try {

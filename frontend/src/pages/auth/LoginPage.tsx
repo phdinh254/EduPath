@@ -7,7 +7,6 @@ import type { Role } from '../../types/api';
 
 const HOME_BY_ROLE: Record<Role, string> = {
   STUDENT: '/student',
-  TEACHER: '/teacher',
   ADMIN: '/admin',
 };
 

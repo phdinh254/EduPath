@@ -1,12 +1,11 @@
 import { apiClient } from '../../lib/api-client';
-import type { AuthTokens, Role, UserProfile } from '../../types/api';
+import type { AuthTokens, UserProfile } from '../../types/api';
 
+// Đăng ký công khai luôn tạo tài khoản STUDENT — không còn chọn vai trò.
 export interface RegisterPayload {
   email: string;
   password: string;
   fullName: string;
-  role: Role;
-  tenantName?: string;
 }
 
 export interface LoginPayload {

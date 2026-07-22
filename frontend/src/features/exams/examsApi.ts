@@ -1,5 +1,5 @@
 import { apiClient } from '../../lib/api-client';
-import type { AttemptReviewItem, Exam, ExamAttempt, ExamQuestion } from '../../types/api';
+import type { AttemptReviewItem, Exam, ExamAttempt, ExamCategory, ExamQuestion } from '../../types/api';
 
 export async function fetchExams(): Promise<Exam[]> {
   const { data } = await apiClient.get<Exam[]>('/exams');
@@ -13,17 +13,44 @@ export async function fetchExam(examId: string): Promise<Exam> {
 
 export async function createExam(payload: {
   title: string;
-  subjectId: string;
+  category?: ExamCategory;
+  subjectId?: string;
   durationMinutes: number;
-  classId?: string;
 }): Promise<Exam> {
   const { data } = await apiClient.post<Exam>('/exams', payload);
   return data;
 }
 
+export interface GenerateExamSectionPayload {
+  name: string;
+  subjectId: string;
+  questionCount: number;
+  maxScore: number;
+}
+
+export interface GenerateExamPayload {
+  title: string;
+  category: ExamCategory;
+  durationMinutes: number;
+  // THPT
+  subjectId?: string;
+  multipleChoiceCount?: number;
+  trueFalseCount?: number;
+  shortAnswerCount?: number;
+  essayCount?: number;
+  // ĐGNL
+  sections?: GenerateExamSectionPayload[];
+}
+
+// AI tự động ghép đề hoàn chỉnh — luồng chính để tạo đề, thay cho soạn thủ công.
+export async function generateExam(payload: GenerateExamPayload): Promise<Exam> {
+  const { data } = await apiClient.post<Exam>('/exams/generate', payload);
+  return data;
+}
+
 export async function addExamQuestion(
   examId: string,
-  payload: { questionId: string; order: number; maxScore: number },
+  payload: { questionId: string; order: number; maxScore: number; sectionId?: string },
 ): Promise<ExamQuestion> {
   const { data } = await apiClient.post<ExamQuestion>(`/exams/${examId}/questions`, payload);
   return data;

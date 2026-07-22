@@ -7,7 +7,7 @@ import { Modal } from '../../components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
 import type { PendingReviewAnswer } from '../../types/api';
 
-export function TeacherPendingReviewPage() {
+export function AdminPendingReviewPage() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [reviewing, setReviewing] = useState<PendingReviewAnswer | null>(null);
@@ -20,7 +20,7 @@ export function TeacherPendingReviewPage() {
   const reviewMutation = useMutation({
     mutationFn: () => reviewEssayAnswer(reviewing!.id, { finalScore, comment: comment || undefined }),
     onSuccess: () => {
-      showToast('Đã công bố điểm chính thức cho học sinh', 'success');
+      showToast('Đã cập nhật điểm chính thức', 'success');
       setReviewing(null);
       queryClient.invalidateQueries({ queryKey: ['pending-review'] });
     },
@@ -28,7 +28,7 @@ export function TeacherPendingReviewPage() {
   });
 
   function openReview(answer: PendingReviewAnswer) {
-    setFinalScore(answer.aiPreliminaryScore ?? 0);
+    setFinalScore(answer.scoreAwarded ?? answer.aiPreliminaryScore ?? 0);
     setComment('');
     setFormError(null);
     setReviewing(answer);
@@ -42,10 +42,13 @@ export function TeacherPendingReviewPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-xl font-semibold text-slate-900 dark:text-slate-100">Bài Văn chờ duyệt</h1>
+      <h1 className="mb-2 text-xl font-semibold text-slate-900 dark:text-slate-100">Hậu kiểm điểm Văn</h1>
+      <p className="mb-6 text-sm text-slate-500">
+        AI đã chấm và công bố điểm cho học sinh — đây là danh sách để bạn spot-check chất lượng AI và điều chỉnh nếu cần.
+      </p>
       {isLoading && <LoadingState />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}
-      {data && data.length === 0 && <EmptyState label="Không có bài nào đang chờ duyệt." />}
+      {data && data.length === 0 && <EmptyState label="Không có bài nào cần hậu kiểm." />}
 
       <div className="space-y-3">
         {data?.map((answer) => (
@@ -61,21 +64,21 @@ export function TeacherPendingReviewPage() {
                 onClick={() => openReview(answer)}
                 className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white dark:bg-white dark:text-slate-900"
               >
-                Chấm điểm
+                Điều chỉnh điểm
               </button>
             </div>
             <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-400">
               {(answer.response as { text?: string } | null)?.text ?? '(không có nội dung)'}
             </p>
             <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-              AI chấm sơ bộ: {answer.aiPreliminaryScore} điểm — {answer.aiComment}
+              AI chấm: {answer.scoreAwarded ?? answer.aiPreliminaryScore} điểm (điểm tham khảo do AI đánh giá) — {answer.aiComment}
             </p>
           </div>
         ))}
       </div>
 
       {reviewing && (
-        <Modal title="Duyệt điểm bài Văn" onClose={() => setReviewing(null)}>
+        <Modal title="Điều chỉnh điểm bài Văn" onClose={() => setReviewing(null)}>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <label className="text-sm text-slate-600 dark:text-slate-400">Điểm chính thức</label>
             <input
@@ -100,7 +103,7 @@ export function TeacherPendingReviewPage() {
               disabled={reviewMutation.isPending}
               className="rounded-lg bg-slate-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
             >
-              {reviewMutation.isPending ? 'Đang lưu...' : 'Công bố điểm'}
+              {reviewMutation.isPending ? 'Đang lưu...' : 'Cập nhật điểm'}
             </button>
           </form>
         </Modal>

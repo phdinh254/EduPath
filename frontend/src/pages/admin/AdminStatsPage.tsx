@@ -12,8 +12,6 @@ export function AdminStatsPage() {
 
   const tiles = [
     { label: 'Học sinh', value: data.totalStudents },
-    { label: 'Giáo viên', value: data.totalTeachers },
-    { label: 'Trung tâm', value: data.totalTenants },
     { label: 'Môn học', value: data.totalSubjects },
     { label: 'Đề thi', value: data.totalExams },
     { label: 'Lượt làm bài', value: data.totalAttempts },
@@ -32,11 +30,7 @@ export function AdminStatsPage() {
       </div>
 
       <h2 className="mb-3 text-lg font-medium text-slate-900 dark:text-slate-100">Câu hỏi theo trạng thái</h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
-          <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{data.questionsByStatus.draft}</p>
-          <p className="text-sm text-slate-500">Nháp</p>
-        </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
           <p className="text-xl font-bold text-amber-600">{data.questionsByStatus.pendingApproval}</p>
           <p className="text-sm text-slate-500">Chờ duyệt</p>

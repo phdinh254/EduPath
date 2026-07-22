@@ -26,7 +26,6 @@ const baseUser: UserProfile = {
   role: 'STUDENT',
   isActive: true,
   createdAt: new Date().toISOString(),
-  ownedTenant: null,
 };
 
 describe('ProtectedRoute', () => {
@@ -58,7 +57,7 @@ describe('ProtectedRoute', () => {
 
   it('redirects home when the user role is not allowed (blocks cross-role access)', () => {
     vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
-      user: { ...baseUser, role: 'TEACHER' },
+      user: { ...baseUser, role: 'STUDENT' },
       isLoading: false,
       isAuthenticated: true,
       login: vi.fn(),

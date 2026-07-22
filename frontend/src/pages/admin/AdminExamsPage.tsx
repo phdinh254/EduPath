@@ -1,0 +1,359 @@
+import { useState, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { fetchSubjects } from '../../features/subjects/subjectsApi';
+import {
+  createExam,
+  fetchExams,
+  generateExam,
+  type GenerateExamSectionPayload,
+} from '../../features/exams/examsApi';
+import { getApiErrorMessage } from '../../lib/api-client';
+import { useToast } from '../../components/ToastProvider';
+import { Modal } from '../../components/Modal';
+import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import type { ExamCategory } from '../../types/api';
+
+function CreateExamForm({ onDone }: { onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const [title, setTitle] = useState('');
+  const [subjectId, setSubjectId] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState(45);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: fetchSubjects });
+
+  const createMutation = useMutation({
+    mutationFn: () => createExam({ title, category: 'THPT', subjectId, durationMinutes }),
+    onSuccess: () => {
+      showToast('Tạo đề thi thành công', 'success');
+      queryClient.invalidateQueries({ queryKey: ['exams'] });
+      onDone();
+    },
+    onError: (err) => setFormError(getApiErrorMessage(err)),
+  });
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    createMutation.mutate();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <p className="text-xs text-slate-500">Tạo đề rỗng (1 môn) rồi thêm câu hỏi thủ công ở trang chi tiết.</p>
+      <input
+        required
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Tên đề thi"
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      />
+      <select
+        required
+        value={subjectId}
+        onChange={(e) => setSubjectId(e.target.value)}
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      >
+        <option value="">Chọn môn học</option>
+        {subjectsQuery.data?.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+      <input
+        type="number"
+        required
+        min={1}
+        value={durationMinutes}
+        onChange={(e) => setDurationMinutes(Number(e.target.value))}
+        placeholder="Thời gian làm bài (phút)"
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      />
+      {formError && <ErrorState message={formError} />}
+      <button
+        type="submit"
+        disabled={createMutation.isPending}
+        className="rounded-lg bg-slate-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+      >
+        {createMutation.isPending ? 'Đang tạo...' : 'Tạo đề thi'}
+      </button>
+    </form>
+  );
+}
+
+function GenerateExamForm({ onDone }: { onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const [category, setCategory] = useState<ExamCategory>('THPT');
+  const [title, setTitle] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState(90);
+  const [subjectId, setSubjectId] = useState('');
+  const [multipleChoiceCount, setMultipleChoiceCount] = useState(24);
+  const [trueFalseCount, setTrueFalseCount] = useState(4);
+  const [shortAnswerCount, setShortAnswerCount] = useState(0);
+  const [essayCount, setEssayCount] = useState(0);
+  const [sections, setSections] = useState<GenerateExamSectionPayload[]>([
+    { name: 'Tư duy định lượng', subjectId: '', questionCount: 10, maxScore: 50 },
+    { name: 'Tư duy định tính', subjectId: '', questionCount: 10, maxScore: 50 },
+    { name: 'Khoa học', subjectId: '', questionCount: 10, maxScore: 50 },
+  ]);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: fetchSubjects });
+
+  const generateMutation = useMutation({
+    mutationFn: () =>
+      generateExam(
+        category === 'THPT'
+          ? {
+              title,
+              category,
+              durationMinutes,
+              subjectId,
+              multipleChoiceCount,
+              trueFalseCount,
+              shortAnswerCount,
+              essayCount,
+            }
+          : { title, category, durationMinutes, sections },
+      ),
+    onSuccess: () => {
+      showToast('AI đã ghép đề thi hoàn chỉnh', 'success');
+      queryClient.invalidateQueries({ queryKey: ['exams'] });
+      onDone();
+    },
+    onError: (err) => setFormError(getApiErrorMessage(err)),
+  });
+
+  function updateSection(index: number, patch: Partial<GenerateExamSectionPayload>) {
+    setSections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    generateMutation.mutate();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto">
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value as ExamCategory)}
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      >
+        <option value="THPT">Thi tốt nghiệp THPT quốc gia</option>
+        <option value="DGNL">Đánh giá năng lực (ĐGNL)</option>
+      </select>
+      <input
+        required
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Tên đề thi"
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      />
+      <input
+        type="number"
+        required
+        min={1}
+        value={durationMinutes}
+        onChange={(e) => setDurationMinutes(Number(e.target.value))}
+        placeholder="Thời gian làm bài (phút)"
+        className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+      />
+
+      {category === 'THPT' ? (
+        <>
+          <select
+            required
+            value={subjectId}
+            onChange={(e) => setSubjectId(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+          >
+            <option value="">Chọn môn học</option>
+            {subjectsQuery.data?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">
+            Môn Ngữ văn: chỉ điền số câu tự luận, để trắc nghiệm bằng 0.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs text-slate-500">
+              Trắc nghiệm (0.25đ/câu)
+              <input
+                type="number"
+                min={0}
+                value={multipleChoiceCount}
+                onChange={(e) => setMultipleChoiceCount(Number(e.target.value))}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+            </label>
+            <label className="text-xs text-slate-500">
+              Đúng/sai (thang lũy tiến)
+              <input
+                type="number"
+                min={0}
+                value={trueFalseCount}
+                onChange={(e) => setTrueFalseCount(Number(e.target.value))}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+            </label>
+            <label className="text-xs text-slate-500">
+              Trả lời ngắn
+              <input
+                type="number"
+                min={0}
+                value={shortAnswerCount}
+                onChange={(e) => setShortAnswerCount(Number(e.target.value))}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+            </label>
+            <label className="text-xs text-slate-500">
+              Tự luận (Văn)
+              <input
+                type="number"
+                min={0}
+                value={essayCount}
+                onChange={(e) => setEssayCount(Number(e.target.value))}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+            </label>
+          </div>
+        </>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">3 phần thi, tổng thang điểm 150.</p>
+          {sections.map((section, i) => (
+            <div key={i} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              <input
+                value={section.name}
+                onChange={(e) => updateSection(i, { name: e.target.value })}
+                placeholder="Tên phần thi"
+                className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+              />
+              <select
+                required
+                value={section.subjectId}
+                onChange={(e) => updateSection(i, { subjectId: e.target.value })}
+                className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+              >
+                <option value="">Chọn môn học</option>
+                {subjectsQuery.data?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs text-slate-500">
+                  Số câu
+                  <input
+                    type="number"
+                    min={1}
+                    value={section.questionCount}
+                    onChange={(e) => updateSection(i, { questionCount: Number(e.target.value) })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+                  />
+                </label>
+                <label className="text-xs text-slate-500">
+                  Thang điểm phần này
+                  <input
+                    type="number"
+                    min={0}
+                    value={section.maxScore}
+                    onChange={(e) => updateSection(i, { maxScore: Number(e.target.value) })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {formError && <ErrorState message={formError} />}
+      <button
+        type="submit"
+        disabled={generateMutation.isPending}
+        className="rounded-lg bg-slate-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
+      >
+        {generateMutation.isPending ? 'Đang ghép đề...' : 'AI ghép đề'}
+      </button>
+    </form>
+  );
+}
+
+const CATEGORY_LABEL: Record<ExamCategory, string> = {
+  THPT: 'THPT quốc gia',
+  DGNL: 'Đánh giá năng lực',
+};
+
+export function AdminExamsPage() {
+  const [showCreate, setShowCreate] = useState(false);
+  const [showGenerate, setShowGenerate] = useState(false);
+
+  const examsQuery = useQuery({ queryKey: ['exams'], queryFn: fetchExams });
+  const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: fetchSubjects });
+  const subjectNameById = new Map(subjectsQuery.data?.map((s) => [s.id, s.name]));
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Đề thi</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowGenerate(true)}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium dark:border-slate-700"
+          >
+            + AI ghép đề
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-slate-900"
+          >
+            + Tạo đề thủ công
+          </button>
+        </div>
+      </div>
+
+      {examsQuery.isLoading && <LoadingState />}
+      {examsQuery.error && <ErrorState message={getApiErrorMessage(examsQuery.error)} />}
+      {examsQuery.data && examsQuery.data.length === 0 && <EmptyState label="Chưa có đề thi nào." />}
+
+      <div className="space-y-3">
+        {examsQuery.data?.map((exam) => (
+          <Link
+            key={exam.id}
+            to={`/admin/exams/${exam.id}`}
+            className="block rounded-lg border border-slate-200 p-4 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
+          >
+            <p className="font-medium text-slate-900 dark:text-slate-100">{exam.title}</p>
+            <p className="text-xs text-slate-500">
+              {CATEGORY_LABEL[exam.category]} ·{' '}
+              {exam.subjectId ? (subjectNameById.get(exam.subjectId) ?? 'Môn học') : 'Nhiều môn'} ·{' '}
+              {exam.durationMinutes} phút
+            </p>
+          </Link>
+        ))}
+      </div>
+
+      {showCreate && (
+        <Modal title="Tạo đề thi thủ công" onClose={() => setShowCreate(false)}>
+          <CreateExamForm onDone={() => setShowCreate(false)} />
+        </Modal>
+      )}
+
+      {showGenerate && (
+        <Modal title="AI tự động ghép đề" onClose={() => setShowGenerate(false)}>
+          <GenerateExamForm onDone={() => setShowGenerate(false)} />
+        </Modal>
+      )}
+    </div>
+  );
+}

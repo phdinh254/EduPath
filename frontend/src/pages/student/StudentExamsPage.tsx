@@ -29,8 +29,8 @@ export function StudentExamsPage() {
             <div>
               <p className="font-medium text-slate-900 dark:text-slate-100">{exam.title}</p>
               <p className="text-xs text-slate-500">
-                {subjectNameById.get(exam.subjectId) ?? 'Môn học'} · {exam.durationMinutes} phút
-                {exam.tenantId === null && ' · Đề chính thức'}
+                {exam.subjectId ? (subjectNameById.get(exam.subjectId) ?? 'Môn học') : 'Nhiều môn (ĐGNL)'} ·{' '}
+                {exam.durationMinutes} phút
               </p>
             </div>
             <button

@@ -18,10 +18,9 @@ const pendingQuestion: Question = {
   options: ['2x', 'x'],
   correctAnswer: { index: 0 },
   explanation: null,
-  tenantId: 'tenant-1',
-  createdById: 'teacher-1',
-  isGlobal: false,
+  createdById: 'admin-1',
   status: 'PENDING_APPROVAL',
+  rejectReason: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -48,7 +47,6 @@ describe('AdminQuestionsPage', () => {
     vi.mocked(questionsApi.approveQuestion).mockResolvedValue({
       ...pendingQuestion,
       status: 'APPROVED',
-      isGlobal: true,
     });
 
     renderWithProviders(<AdminQuestionsPage />);
@@ -74,7 +72,7 @@ describe('AdminQuestionsPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Từ chối' }));
     await user.type(screen.getByPlaceholderText('Lý do từ chối (tuỳ chọn)'), 'Sao chép đề thi chính thức');
-    await user.click(screen.getByRole('button', { name: 'Xác nhận từ chối' }));
+    await user.click(screen.getByRole('button', { name: 'Xác nhận' }));
 
     await waitFor(() => {
       expect(questionsApi.rejectQuestion).toHaveBeenCalledWith('q-1', 'Sao chép đề thi chính thức');

@@ -60,7 +60,7 @@ export function StudentResultPage() {
       <p className="mb-6 text-2xl font-bold text-slate-900 dark:text-slate-100">
         {attempt.totalScore != null ? attempt.totalScore.toFixed(2) : '—'} điểm
         <span className="ml-2 text-sm font-normal text-slate-500">
-          ({attempt.status === 'GRADED' ? 'Đã chấm xong' : 'Đang chờ giáo viên duyệt một phần'})
+          ({attempt.status === 'GRADED' ? 'Đã chấm xong' : 'Đang chấm...'})
         </span>
       </p>
 
@@ -91,20 +91,9 @@ export function StudentResultPage() {
             ) : (
               <div className="mt-2 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">
                 {item.aiComment && <p className="mb-1 text-slate-600 dark:text-slate-400">{item.aiComment}</p>}
-                {item.isAiReferenceOnly ? (
-                  <p className="font-medium text-amber-600 dark:text-amber-400">
-                    Điểm AI tham khảo, chưa được giáo viên duyệt. ({item.scoreAwarded ?? item.aiPreliminaryScore}/
-                    {item.maxScore} điểm)
-                  </p>
-                ) : item.scoreAwarded === null ? (
-                  <p className="font-medium text-amber-600 dark:text-amber-400">
-                    Đang chờ giáo viên duyệt điểm (AI chấm sơ bộ: {item.aiPreliminaryScore}/{item.maxScore})
-                  </p>
-                ) : (
-                  <p className="font-medium text-emerald-600">
-                    Điểm chính thức: {item.scoreAwarded}/{item.maxScore} (đã giáo viên duyệt)
-                  </p>
-                )}
+                <p className="font-medium text-amber-600 dark:text-amber-400">
+                  {item.scoreAwarded ?? item.aiPreliminaryScore}/{item.maxScore} điểm — điểm tham khảo do AI đánh giá
+                </p>
               </div>
             )}
           </div>

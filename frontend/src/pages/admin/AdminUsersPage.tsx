@@ -6,7 +6,7 @@ import { useToast } from '../../components/ToastProvider';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
 import type { Role } from '../../types/api';
 
-const ROLE_LABEL: Record<Role, string> = { STUDENT: 'Học sinh', TEACHER: 'Giáo viên', ADMIN: 'Quản trị viên' };
+const ROLE_LABEL: Record<Role, string> = { STUDENT: 'Học sinh', ADMIN: 'Quản trị viên' };
 
 export function AdminUsersPage() {
   const queryClient = useQueryClient();
@@ -38,7 +38,6 @@ export function AdminUsersPage() {
         >
           <option value="">Tất cả vai trò</option>
           <option value="STUDENT">Học sinh</option>
-          <option value="TEACHER">Giáo viên</option>
           <option value="ADMIN">Quản trị viên</option>
         </select>
       </div>
@@ -57,9 +56,7 @@ export function AdminUsersPage() {
               <p className="font-medium text-slate-900 dark:text-slate-100">
                 {u.fullName} <span className="text-xs font-normal text-slate-500">({ROLE_LABEL[u.role]})</span>
               </p>
-              <p className="text-xs text-slate-500">
-                {u.email} {u.ownedTenant && `· ${u.ownedTenant.name}`}
-              </p>
+              <p className="text-xs text-slate-500">{u.email}</p>
             </div>
             <button
               onClick={() => toggleMutation.mutate({ id: u.id, isActive: !u.isActive })}

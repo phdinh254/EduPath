@@ -4,23 +4,16 @@ import { useAuth } from '../features/auth/AuthContext';
 const NAV_BY_ROLE = {
   STUDENT: [
     { to: '/student', label: 'Môn học', end: true },
-    { to: '/student/classes', label: 'Lớp học' },
     { to: '/student/exams', label: 'Đề thi' },
     { to: '/student/roadmap', label: 'Lộ trình AI' },
-  ],
-  TEACHER: [
-    { to: '/teacher', label: 'Tổng quan', end: true },
-    { to: '/teacher/classes', label: 'Lớp học' },
-    { to: '/teacher/questions', label: 'Câu hỏi' },
-    { to: '/teacher/exams', label: 'Đề thi' },
-    { to: '/teacher/pending-review', label: 'Chờ duyệt Văn' },
   ],
   ADMIN: [
     { to: '/admin', label: 'Thống kê', end: true },
     { to: '/admin/users', label: 'Người dùng' },
-    { to: '/admin/tenants', label: 'Trung tâm' },
     { to: '/admin/subjects', label: 'Môn học' },
-    { to: '/admin/questions', label: 'Duyệt câu hỏi' },
+    { to: '/admin/questions', label: 'Câu hỏi' },
+    { to: '/admin/exams', label: 'Đề thi' },
+    { to: '/admin/pending-review', label: 'Hậu kiểm điểm Văn' },
     { to: '/admin/audit-logs', label: 'Audit log' },
   ],
 } as const;
