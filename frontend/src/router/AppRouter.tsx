@@ -7,7 +7,6 @@ import { LoginPage } from '../pages/auth/LoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 import { AuthCallbackPage } from '../pages/auth/AuthCallbackPage';
 
-import { StudentSubjectsPage } from '../pages/student/StudentSubjectsPage';
 import { StudentExamsPage } from '../pages/student/StudentExamsPage';
 import { StudentExamAttemptPage } from '../pages/student/StudentExamAttemptPage';
 import { StudentResultPage } from '../pages/student/StudentResultPage';
@@ -42,7 +41,7 @@ export function AppRouter() {
 
       <Route element={<ProtectedRoute allowedRoles={['STUDENT']} />}>
         <Route element={<AppLayout />}>
-          <Route path="/student" element={<StudentSubjectsPage />} />
+          <Route path="/student" element={<Navigate to="/student/exams" replace />} />
           <Route path="/student/exams" element={<StudentExamsPage />} />
           <Route path="/student/exams/:examId/attempt" element={<StudentExamAttemptPage />} />
           <Route path="/student/attempts/:attemptId/result" element={<StudentResultPage />} />

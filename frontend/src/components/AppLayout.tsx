@@ -16,8 +16,7 @@ import {
 
 const NAV_BY_ROLE: Record<'STUDENT' | 'ADMIN', { to: string; label: string; end?: boolean; icon: ReactNode }[]> = {
   STUDENT: [
-    { to: '/student', label: 'Môn học', end: true, icon: <BookIcon className="h-[18px] w-[18px]" /> },
-    { to: '/student/exams', label: 'Đề thi', icon: <FileTextIcon className="h-[18px] w-[18px]" /> },
+    { to: '/student/exams', label: 'Kho đề thi', icon: <FileTextIcon className="h-[18px] w-[18px]" /> },
     { to: '/student/roadmap', label: 'Lộ trình AI', icon: <RouteIcon className="h-[18px] w-[18px]" /> },
   ],
   ADMIN: [
@@ -53,30 +52,30 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-6">
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-3">
+          <div className="flex shrink-0 items-center">
             <Logo size={26} />
-            <nav className="hidden items-center gap-1 md:flex">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end ?? false}
-                  className={({ isActive }) =>
-                    `flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition ${
-                      isActive
-                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm shadow-indigo-500/30'
-                        : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
-                    }`
-                  }
-                >
-                  {item.icon}
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
           </div>
-          <div className="flex items-center gap-3">
+          <nav className="hidden flex-1 items-center justify-center gap-1 md:flex">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end ?? false}
+                className={({ isActive }) =>
+                  `flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium transition ${
+                    isActive
+                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm shadow-indigo-500/30'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
+                  }`
+                }
+              >
+                {item.icon}
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="flex shrink-0 items-center gap-3">
             <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 py-1 pl-1 pr-3 dark:border-slate-800">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white">
                 {initials(user.fullName)}
