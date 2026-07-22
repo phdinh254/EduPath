@@ -161,6 +161,23 @@ export class GradingService {
       throw new ForbiddenException('Bạn không có quyền duyệt bài này');
     }
 
+    const examQuestion = await this.prisma.examQuestion.findUnique({
+      where: {
+        examId_questionId: {
+          examId: answer.attempt.examId,
+          questionId: answer.questionId,
+        },
+      },
+    });
+    if (
+      examQuestion &&
+      (finalScore < 0 || finalScore > examQuestion.maxScore)
+    ) {
+      throw new BadRequestException(
+        `Điểm phải trong khoảng 0 đến ${examQuestion.maxScore}`,
+      );
+    }
+
     await this.prisma.teacherReview.upsert({
       where: { answerId },
       create: {

@@ -112,7 +112,8 @@ export class QuestionsController {
   @Post(':id/reject')
   @ApiOperation({
     summary: 'Từ chối câu hỏi được đề xuất',
-    description: 'Chỉ ADMIN. Lý do từ chối (nếu có) được ghi vào AuditLog.',
+    description:
+      'Chỉ ADMIN. Lý do từ chối (nếu có) được ghi vào AuditLog và lưu vào Question.rejectReason để giáo viên đề xuất tự tra cứu qua GET /questions/:id.',
   })
   @ApiParam({ name: 'id', description: 'ID câu hỏi' })
   @ApiResponse({ status: 201, description: 'Đã từ chối: status=REJECTED.' })

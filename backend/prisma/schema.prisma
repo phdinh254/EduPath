@@ -200,6 +200,8 @@ model Question {
   // isGlobal=true + status=APPROVED nghĩa là câu hỏi đã vào kho dùng chung toàn hệ thống
   isGlobal Boolean       @default(false)
   status   ContentStatus @default(DRAFT)
+  // Lý do admin từ chối đề xuất (status=REJECTED), hiển thị lại cho giáo viên đề xuất
+  rejectReason String?
 
   examQuestions ExamQuestion[]
   answers       Answer[]

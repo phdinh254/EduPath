@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -63,5 +71,20 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng.' })
   setActive(@Param('id') id: string, @Body() dto: UpdateUserStatusDto) {
     return this.usersService.setActive(id, dto.isActive);
+  }
+
+  @Roles(Role.ADMIN)
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Ẩn danh dữ liệu cá nhân của người dùng',
+    description:
+      'Chỉ ADMIN. Xoá email/họ tên/ngày sinh thật, vô hiệu hoá tài khoản, thu hồi refresh token — phục vụ yêu cầu xoá dữ liệu cá nhân theo NĐ13/2023. Không xoá cứng để giữ toàn vẹn dữ liệu học tập/điểm số liên quan.',
+  })
+  @ApiParam({ name: 'id', description: 'ID người dùng' })
+  @ApiResponse({ status: 200, description: 'Đã ẩn danh tài khoản.' })
+  @ApiResponse({ status: 403, description: 'Không phải ADMIN.' })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy người dùng.' })
+  anonymize(@Param('id') id: string) {
+    return this.usersService.anonymize(id);
   }
 }

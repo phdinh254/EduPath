@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ContentStatus, Prisma, Role } from '@prisma/client';
+import { ContentStatus, Prisma, QuestionType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateQuestionDto } from './dto/create-question.dto';
@@ -17,6 +17,18 @@ export class QuestionsService {
     const isAdmin = user.role === Role.ADMIN;
     if (!isAdmin && !user.tenantId) {
       throw new ForbiddenException('Giáo viên chưa có tenant');
+    }
+    if (dto.type === QuestionType.TRUE_FALSE) {
+      // Thang điểm lũy tiến (0.1/0.25/0.5/1) chỉ đúng chuẩn Bộ GD&ĐT khi câu có
+      // đúng 4 ý — xem grading.utils.ts. Sai số ý sẽ âm thầm rơi về tính tuyến
+      // tính, nên phải chặn ngay từ lúc tạo câu hỏi.
+      const statements = (dto.correctAnswer as { statements?: unknown } | null)
+        ?.statements;
+      if (!Array.isArray(statements) || statements.length !== 4) {
+        throw new BadRequestException(
+          'Câu đúng/sai phải có đúng 4 ý (correctAnswer.statements)',
+        );
+      }
     }
     return this.prisma.question.create({
       data: {
@@ -85,7 +97,8 @@ export class QuestionsService {
     }
     return this.prisma.question.update({
       where: { id },
-      data: { status: ContentStatus.PENDING_APPROVAL },
+      // Xoá lý do reject cũ (nếu có, từ lần đề xuất trước) để tránh hiển thị nhầm.
+      data: { status: ContentStatus.PENDING_APPROVAL, rejectReason: null },
     });
   }
 
@@ -113,7 +126,7 @@ export class QuestionsService {
     }
     const updated = await this.prisma.question.update({
       where: { id },
-      data: { status: ContentStatus.REJECTED },
+      data: { status: ContentStatus.REJECTED, rejectReason: reason ?? null },
     });
     await this.prisma.auditLog.create({
       data: {

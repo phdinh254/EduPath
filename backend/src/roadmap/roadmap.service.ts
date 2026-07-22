@@ -54,14 +54,6 @@ export class RoadmapService {
 
     if (weakTopics.length === 0) return;
 
-    const stages = weakTopics.flatMap((wt) =>
-      ROADMAP_STAGES.map((stage) => ({
-        topicId: wt.topicId,
-        stage,
-        status: 'PENDING',
-      })),
-    );
-
     const existing = await this.prisma.studyRoadmap.findFirst({
       where: {
         studentId: attempt.studentId,
@@ -69,6 +61,32 @@ export class RoadmapService {
         status: RoadmapStatus.ACTIVE,
       },
     });
+
+    // Giữ lại trạng thái (vd. COMPLETED) của các giai đoạn đã có từ lần phân
+    // tích trước — chỉ topic/giai đoạn còn yếu mới xuất hiện lại, nhưng không
+    // được reset về PENDING nếu học sinh đã hoàn thành trước đó.
+    const previousStages =
+      ((existing?.stages ?? []) as Array<{
+        topicId: string;
+        stage: string;
+        status: string;
+      }>) ?? [];
+    const previousByKey = new Map(
+      previousStages.map((s) => [`${s.topicId}:${s.stage}`, s]),
+    );
+    const stages = weakTopics.flatMap((wt) =>
+      ROADMAP_STAGES.map((stage) => {
+        const key = `${wt.topicId}:${stage}`;
+        return (
+          previousByKey.get(key) ?? {
+            topicId: wt.topicId,
+            stage,
+            status: 'PENDING',
+          }
+        );
+      }),
+    );
+
     if (existing) {
       await this.prisma.studyRoadmap.update({
         where: { id: existing.id },
