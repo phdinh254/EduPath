@@ -43,6 +43,30 @@ const SORT_LABEL: Record<SortMode, string> = {
   topScore: 'Điểm TB cao nhất',
 };
 
+type StatusFilter = 'all' | 'notStarted' | 'done';
+
+const STATUS_FILTER_TABS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'notStarted', label: 'Chưa làm' },
+  { value: 'done', label: 'Đã làm' },
+];
+
+type DurationFilter = 'all' | 'short' | 'medium' | 'long';
+
+const DURATION_FILTER_TABS: { value: DurationFilter; label: string }[] = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'short', label: 'Dưới 30 phút' },
+  { value: 'medium', label: '30–60 phút' },
+  { value: 'long', label: 'Trên 60 phút' },
+];
+
+function matchesDuration(minutes: number, filter: DurationFilter): boolean {
+  if (filter === 'short') return minutes < 30;
+  if (filter === 'medium') return minutes >= 30 && minutes <= 60;
+  if (filter === 'long') return minutes > 60;
+  return true;
+}
+
 function ExamCover({ exam, accent }: { exam: Exam; accent: string }) {
   return (
     <div className={`relative flex h-28 items-center justify-center rounded-t-2xl bg-gradient-to-br p-4 ${accent}`}>
@@ -123,6 +147,9 @@ export function StudentExamsPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortMode>('newest');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [likedOnly, setLikedOnly] = useState(false);
+  const [durationFilter, setDurationFilter] = useState<DurationFilter>('all');
 
   const examsQuery = useQuery({ queryKey: ['exams'], queryFn: fetchExams });
   const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: fetchSubjects });
@@ -159,6 +186,10 @@ export function StudentExamsPage() {
     if (category === 'THPT' && selectedSubjectId) {
       list = list.filter((e) => e.subjectId === selectedSubjectId);
     }
+    if (statusFilter === 'notStarted') list = list.filter((e) => e.attemptCount === 0);
+    else if (statusFilter === 'done') list = list.filter((e) => e.attemptCount > 0);
+    if (likedOnly) list = list.filter((e) => e.liked);
+    if (durationFilter !== 'all') list = list.filter((e) => matchesDuration(e.durationMinutes, durationFilter));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter((e) => e.title.toLowerCase().includes(q));
@@ -168,10 +199,11 @@ export function StudentExamsPage() {
     else if (sort === 'topScore') sorted.sort((a, b) => (b.avgScore ?? -1) - (a.avgScore ?? -1));
     else sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return sorted;
-  }, [examsInCategory, category, selectedSubjectId, search, sort]);
+  }, [examsInCategory, category, selectedSubjectId, statusFilter, likedOnly, durationFilter, search, sort]);
 
   const totalAttempts = examsInCategory.reduce((sum, e) => sum + e.attemptCount, 0);
   const banner = CATEGORY_BANNER[category];
+  const hasActiveFilters = statusFilter !== 'all' || likedOnly || durationFilter !== 'all';
 
   function handleSelectCategory(next: ExamCategory) {
     setCategory(next);
@@ -179,24 +211,91 @@ export function StudentExamsPage() {
     setSearch('');
   }
 
+  function resetFilters() {
+    setStatusFilter('all');
+    setLikedOnly(false);
+    setDurationFilter('all');
+  }
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr]">
-      {/* Tầng 1: chọn nhóm thi */}
-      <aside className="space-y-2">
-        {CATEGORY_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => handleSelectCategory(tab.value)}
-            className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-medium transition ${
-              category === tab.value
-                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
-                : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-900'
-            }`}
-          >
-            {tab.label}
-            <span>›</span>
-          </button>
-        ))}
+      {/* Tầng 1: chọn nhóm thi + bộ lọc */}
+      <aside className="space-y-6">
+        <div className="space-y-2">
+          {CATEGORY_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => handleSelectCategory(tab.value)}
+              className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-medium transition ${
+                category === tab.value
+                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
+                  : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-900'
+              }`}
+            >
+              {tab.label}
+              <span>›</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Bộ lọc</p>
+            {hasActiveFilters && (
+              <button onClick={resetFilters} className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+                Xoá lọc
+              </button>
+            )}
+          </div>
+
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Trạng thái làm bài</p>
+            <div className="flex flex-col gap-1">
+              {STATUS_FILTER_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setStatusFilter(tab.value)}
+                  className={`rounded-xl px-3 py-1.5 text-left text-sm transition ${
+                    statusFilter === tab.value
+                      ? 'bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300'
+                      : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Thời lượng</p>
+            <div className="flex flex-col gap-1">
+              {DURATION_FILTER_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setDurationFilter(tab.value)}
+                  className={`rounded-xl px-3 py-1.5 text-left text-sm transition ${
+                    durationFilter === tab.value
+                      ? 'bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300'
+                      : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input
+              type="checkbox"
+              className="accent-indigo-600"
+              checked={likedOnly}
+              onChange={(e) => setLikedOnly(e.target.checked)}
+            />
+            Chỉ hiện đề đã thích
+          </label>
+        </div>
       </aside>
 
       <div>
