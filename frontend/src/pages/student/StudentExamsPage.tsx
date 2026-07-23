@@ -219,8 +219,8 @@ export function StudentExamsPage() {
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr]">
-      {/* Tầng 1: chọn nhóm thi + bộ lọc */}
-      <aside className="space-y-6">
+      {/* Tầng 1: chọn nhóm thi + bộ lọc — cố định khi cuộn, tự cuộn riêng nếu cao hơn màn hình */}
+      <aside className="space-y-6 self-start lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
         <div className="space-y-2">
           {CATEGORY_TABS.map((tab) => (
             <button
