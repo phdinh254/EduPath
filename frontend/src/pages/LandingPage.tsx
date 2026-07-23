@@ -48,6 +48,33 @@ const STATS = [
   { value: '24/7', label: 'sẵn sàng luyện đề mọi lúc' },
 ];
 
+const EXAM_TYPES = [
+  {
+    tag: 'Chuẩn cấu trúc 2025',
+    title: 'Thi Tốt nghiệp THPT',
+    icon: '🎓',
+    gradient: 'from-indigo-600 to-blue-600',
+    points: [
+      'Luyện theo từng môn: Toán, Văn, Anh, Lý, Hóa, Sinh, Sử, Địa...',
+      'Đúng 3 dạng câu đề thi thật: trắc nghiệm nhiều lựa chọn, đúng/sai lũy tiến, trả lời ngắn',
+      'Cấu trúc đề cố định theo môn — AI tự động ghép đề bám sát ma trận thi thật',
+      'Bài tự luận Ngữ văn được AI chấm và giải thích ngay khi nộp',
+    ],
+  },
+  {
+    tag: '3 phần thi trong 1 đề',
+    title: 'Đánh giá năng lực (ĐGNL)',
+    icon: '🧩',
+    gradient: 'from-violet-600 to-fuchsia-600',
+    points: [
+      'Tổng hợp nhiều lĩnh vực trong một bài thi duy nhất, đúng tinh thần ĐGNL',
+      'Ngôn ngữ — Toán học & tư duy logic — Giải quyết vấn đề',
+      'Dùng ngay mẫu đề có sẵn hoặc tự khai báo cấu trúc theo nhu cầu ôn luyện',
+      'Thang điểm 150, quy đổi trực tiếp để so sánh tiến độ theo thời gian',
+    ],
+  },
+];
+
 export function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-white dark:bg-slate-950">
@@ -151,6 +178,53 @@ export function LandingPage() {
         </div>
       </section>
 
+      {/* Exam types */}
+      <section className="mx-auto max-w-6xl px-6 py-24">
+        <div className="mb-12 text-center">
+          <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl dark:text-white">
+            Hai kỳ thi, một nền tảng duy nhất
+          </h2>
+          <p className="mt-3 text-slate-500 dark:text-slate-400">
+            Không cần chọn giữa THPT và ĐGNL — luyện song song cả hai, mỗi kỳ thi có một luồng đề riêng đúng
+            chuẩn.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {EXAM_TYPES.map((exam) => (
+            <div
+              key={exam.title}
+              className="flex flex-col rounded-3xl border border-slate-200 bg-white p-8 shadow-sm transition hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div
+                className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br text-2xl shadow-md ${exam.gradient}`}
+              >
+                <span aria-hidden>{exam.icon}</span>
+              </div>
+              <span className="mt-5 inline-flex w-fit items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                {exam.tag}
+              </span>
+              <h3 className="mt-3 text-xl font-bold text-slate-900 dark:text-white">{exam.title}</h3>
+              <ul className="mt-5 flex-1 space-y-3">
+                {exam.points.map((point) => (
+                  <li key={point} className="flex items-start gap-2.5 text-sm text-slate-600 dark:text-slate-300">
+                    <span
+                      className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-gradient-to-br ${exam.gradient}`}
+                    />
+                    {point}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to="/register"
+                className="mt-7 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:text-slate-200 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
+              >
+                Luyện đề {exam.title.includes('ĐGNL') ? 'ĐGNL' : 'THPT'} ngay →
+              </Link>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* How it works */}
       <section className="border-y border-slate-200 bg-slate-50 py-24 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="mx-auto max-w-6xl px-6">
@@ -201,10 +275,64 @@ export function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 py-10 dark:border-slate-800">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 text-sm text-slate-400 sm:flex-row">
-          <span>© {new Date().getFullYear()} EduPath</span>
-          <span>Đồng hành ôn thi THPT & Đánh giá năng lực cùng AI</span>
+      <footer className="border-t border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40">
+        <div className="mx-auto max-w-6xl px-6 py-16">
+          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+            <div className="col-span-2 sm:col-span-1">
+              <Logo size={26} />
+              <p className="mt-4 max-w-xs text-sm text-slate-500 dark:text-slate-400">
+                Nền tảng luyện thi THPT & Đánh giá năng lực bằng AI — chấm điểm tức thời, ra đề không giới
+                hạn, lộ trình ôn tập riêng cho từng học sinh.
+              </p>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Kỳ thi</p>
+              <ul className="mt-4 space-y-2.5 text-sm text-slate-500 dark:text-slate-400">
+                <li>
+                  <Link to="/register" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">
+                    Thi Tốt nghiệp THPT
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/register" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">
+                    Đánh giá năng lực (ĐGNL)
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/register" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">
+                    Lộ trình ôn tập AI
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Tài khoản</p>
+              <ul className="mt-4 space-y-2.5 text-sm text-slate-500 dark:text-slate-400">
+                <li>
+                  <Link to="/register" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">
+                    Đăng ký miễn phí
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/login" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">
+                    Đăng nhập
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Sản phẩm</p>
+              <ul className="mt-4 space-y-2.5 text-sm text-slate-500 dark:text-slate-400">
+                <li>Chấm điểm AI tức thời</li>
+                <li>Ngân hàng đề không giới hạn</li>
+                <li>Theo dõi tiến độ ôn tập</li>
+              </ul>
+            </div>
+          </div>
+          <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-slate-200 pt-8 text-sm text-slate-400 sm:flex-row dark:border-slate-800">
+            <span>© {new Date().getFullYear()} EduPath. Đồng hành ôn thi cùng AI.</span>
+            <span>Chưa phải sản phẩm thương mại — dữ liệu dùng cho mục đích học tập.</span>
+          </div>
         </div>
       </footer>
     </div>
