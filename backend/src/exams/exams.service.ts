@@ -530,6 +530,19 @@ export class ExamsService {
     });
   }
 
+  // Học sinh xem lại lịch sử làm bài của chính mình (mọi đề) — dùng cho
+  // dashboard tiến độ ôn tập cá nhân (điểm theo thời gian, số đề đã làm).
+  listMyAttempts(user: JwtPayload) {
+    return this.prisma.examAttempt.findMany({
+      where: { studentId: user.sub },
+      include: {
+        exam: { select: { id: true, title: true, category: true } },
+        score: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   // Đáp án đúng, giải thích và câu sai chỉ lộ ra sau khi bài đã được nộp/chấm —
   // không dùng chung với listQuestions() vốn phục vụ lúc học sinh đang làm bài.
   async getAttemptReview(attemptId: string, user: JwtPayload) {

@@ -75,6 +75,21 @@ export class ExamsController {
     return this.examsService.toggleLike(id, user);
   }
 
+  @Roles(Role.STUDENT)
+  @Get('me/attempts')
+  @ApiOperation({
+    summary: 'Lịch sử làm bài của chính mình',
+    description:
+      'Chỉ STUDENT. Dùng cho dashboard tiến độ ôn tập cá nhân (điểm theo thời gian, số đề đã làm).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách lượt làm bài của học sinh.',
+  })
+  listMyAttempts(@CurrentUser() user: JwtPayload) {
+    return this.examsService.listMyAttempts(user);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Chi tiết một đề thi',

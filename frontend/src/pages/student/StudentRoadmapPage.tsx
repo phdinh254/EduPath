@@ -1,10 +1,24 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fetchMyRoadmap, fetchMyWeaknesses } from '../../features/roadmap/roadmapApi';
+import { fetchMyAttempts } from '../../features/exams/examsApi';
 import { fetchSubjects } from '../../features/subjects/subjectsApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
 import { Card, PageHeader } from '../../components/ui/Card';
-import { AwardIcon, CheckCircleIcon, RouteIcon, SparklesIcon, TargetIcon } from '../../components/ui/Icons';
+import { StatCard } from '../../components/ui/StatCard';
+import {
+  AwardIcon,
+  CheckCircleIcon,
+  ChartIcon,
+  ClipboardCheckIcon,
+  RouteIcon,
+  SparklesIcon,
+  StarIcon,
+  TargetIcon,
+} from '../../components/ui/Icons';
+import type { ExamCategory } from '../../types/api';
 
 const STAGE_LABEL: Record<string, string> = {
   REVIEW_THEORY: 'Ôn lý thuyết nền tảng',
@@ -12,6 +26,79 @@ const STAGE_LABEL: Record<string, string> = {
   ADVANCED_PRACTICE: 'Luyện bài vận dụng',
   RETEST: 'Kiểm tra lại',
 };
+
+// Thang điểm tối đa theo loại đề — dùng để chuẩn hoá điểm THPT (10) và ĐGNL
+// (150) về cùng thang % khi vẽ chung một biểu đồ xu hướng.
+const MAX_SCORE_BY_CATEGORY: Record<ExamCategory, number> = { THPT: 10, DGNL: 150 };
+
+function ProgressDashboard() {
+  const attemptsQuery = useQuery({ queryKey: ['my-attempts'], queryFn: fetchMyAttempts });
+
+  const gradedAttempts = useMemo(
+    () =>
+      (attemptsQuery.data ?? [])
+        .filter((a) => a.status === 'GRADED' && a.totalScore != null && a.exam)
+        .map((a, i) => {
+          const maxScore = MAX_SCORE_BY_CATEGORY[a.exam!.category];
+          const percent = Math.round(((a.totalScore ?? 0) / maxScore) * 1000) / 10;
+          return {
+            index: i + 1,
+            title: a.exam!.title,
+            percent,
+            date: new Date(a.submittedAt ?? a.createdAt).toLocaleDateString('vi-VN'),
+          };
+        }),
+    [attemptsQuery.data],
+  );
+
+  if (attemptsQuery.isLoading) return <LoadingState label="Đang tải tiến độ ôn tập..." />;
+  if (attemptsQuery.error) return <ErrorState message={getApiErrorMessage(attemptsQuery.error)} />;
+  if (gradedAttempts.length === 0) return null;
+
+  const avgPercent = Math.round((gradedAttempts.reduce((s, a) => s + a.percent, 0) / gradedAttempts.length) * 10) / 10;
+  const last = gradedAttempts[gradedAttempts.length - 1];
+  const prev = gradedAttempts.length > 1 ? gradedAttempts[gradedAttempts.length - 2] : null;
+  const trend = prev ? Math.round((last.percent - prev.percent) * 10) / 10 : null;
+
+  return (
+    <div className="mb-10">
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="Đề đã làm" value={gradedAttempts.length} icon={<ClipboardCheckIcon className="h-6 w-6" />} accent="indigo" />
+        <StatCard label="Điểm trung bình" value={`${avgPercent}%`} icon={<ChartIcon className="h-6 w-6" />} accent="emerald" />
+        <StatCard
+          label="So với lần trước"
+          value={trend == null ? '—' : `${trend > 0 ? '+' : ''}${trend}%`}
+          icon={<StarIcon className="h-6 w-6" />}
+          accent={trend == null || trend >= 0 ? 'sky' : 'red'}
+        />
+      </div>
+      <Card className="p-5">
+        <h2 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">Xu hướng điểm số theo thời gian</h2>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={gradedAttempts} margin={{ top: 4, right: 12, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-800" />
+              <XAxis dataKey="index" tick={{ fontSize: 12 }} stroke="currentColor" className="text-slate-500" />
+              <YAxis
+                domain={[0, 100]}
+                tick={{ fontSize: 12 }}
+                stroke="currentColor"
+                className="text-slate-500"
+                unit="%"
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 13 }}
+                formatter={(value) => [`${value}%`, 'Điểm']}
+                labelFormatter={(index) => gradedAttempts[Number(index) - 1]?.title ?? ''}
+              />
+              <Line type="monotone" dataKey="percent" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+    </div>
+  );
+}
 
 export function StudentRoadmapPage() {
   const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: fetchSubjects });
@@ -29,6 +116,8 @@ export function StudentRoadmapPage() {
         subtitle="Phân tích tự động sau mỗi bài thi, kèm lời khuyên ôn tập do AI viết riêng cho bạn"
         icon={<RouteIcon className="h-5 w-5" />}
       />
+
+      <ProgressDashboard />
 
       {isLoading && <LoadingState />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}

@@ -68,6 +68,13 @@ export async function fetchExamAttempts(examId: string): Promise<ExamAttempt[]> 
   return data;
 }
 
+// Lịch sử làm bài của chính học sinh đang đăng nhập — dùng cho dashboard
+// tiến độ ôn tập cá nhân.
+export async function fetchMyAttempts(): Promise<ExamAttempt[]> {
+  const { data } = await apiClient.get<ExamAttempt[]>('/exams/me/attempts');
+  return data;
+}
+
 export async function startAttempt(examId: string): Promise<ExamAttempt> {
   const { data } = await apiClient.post<ExamAttempt>(`/exams/${examId}/attempts`);
   return data;
