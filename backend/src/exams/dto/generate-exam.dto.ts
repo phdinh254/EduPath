@@ -48,7 +48,13 @@ export class GenerateExamDto {
   @IsString()
   subjectId?: string;
 
-  // --- ĐGNL: nhiều môn/section, tổng thang điểm 150 ---
+  // --- ĐGNL: nhiều môn/section, tổng thang điểm 150 — chọn 1 trong 2: dùng
+  // mẫu đề có sẵn (dgnlTemplateId, xem DgnlTemplatesService) hoặc tự khai báo
+  // sections thủ công như trước. ---
+  @IsOptional()
+  @IsString()
+  dgnlTemplateId?: string;
+
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)

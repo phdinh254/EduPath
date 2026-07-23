@@ -121,13 +121,17 @@ export class QuestionsService {
 
   // Dùng nội bộ bởi ExamsService khi ghép đề tự động: lấy câu hỏi đã duyệt
   // sẵn có, và AI sinh bù ngay tại chỗ (tự động APPROVED, vì đề cần dùng ngay
-  // — không có bước chờ admin) nếu ngân hàng câu hỏi chưa đủ.
+  // — không có bước chờ admin) nếu ngân hàng câu hỏi chưa đủ. excludeIds dùng
+  // để tránh chọn trùng câu hỏi giữa các item/section khác nhau của CÙNG một
+  // đề khi chúng trỏ tới cùng subjectId (vd. ĐGNL có 2 section cùng dùng
+  // Toán) — thiếu chặn này sẽ vi phạm unique constraint (examId, questionId).
   async pickOrSynthesizeQuestions(params: {
     subjectId: string;
     type: QuestionType;
     difficulty?: DifficultyLevel;
     count: number;
     creatorId: string;
+    excludeIds?: string[];
   }) {
     const existing = await this.prisma.question.findMany({
       where: {
@@ -135,6 +139,9 @@ export class QuestionsService {
         type: params.type,
         difficulty: params.difficulty,
         status: ContentStatus.APPROVED,
+        ...(params.excludeIds?.length
+          ? { id: { notIn: params.excludeIds } }
+          : {}),
       },
       take: params.count,
     });

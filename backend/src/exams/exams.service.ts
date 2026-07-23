@@ -15,6 +15,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { QuestionsService } from '../questions/questions.service';
+import { GradingService } from '../grading/grading.service';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { AddExamQuestionDto } from './dto/add-exam-question.dto';
 import { GenerateExamDto } from './dto/generate-exam.dto';
@@ -34,6 +35,7 @@ export class ExamsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly questionsService: QuestionsService,
+    private readonly gradingService: GradingService,
   ) {}
 
   // Tạo đề thủ công — chỉ ADMIN dùng (xem generateExam() cho luồng AI ghép đề
@@ -94,6 +96,9 @@ export class ExamsService {
     });
 
     let order = 1;
+    // Tích luỹ id câu hỏi đã dùng trong chính đề này — tránh 2 item cùng
+    // subjectId+type+difficulty (hoặc admin khai báo trùng) chọn trùng câu.
+    const usedQuestionIds: string[] = [];
     for (const item of structure.items) {
       const questions = await this.questionsService.pickOrSynthesizeQuestions({
         subjectId: dto.subjectId,
@@ -101,8 +106,10 @@ export class ExamsService {
         difficulty: item.difficulty,
         count: item.questionCount,
         creatorId: user.sub,
+        excludeIds: usedQuestionIds,
       });
       for (const q of questions) {
+        usedQuestionIds.push(q.id);
         await this.prisma.examQuestion.create({
           data: {
             examId: exam.id,
@@ -116,12 +123,35 @@ export class ExamsService {
     return this.withDetails(exam.id);
   }
 
-  private async generateDgnlExam(user: JwtPayload, dto: GenerateExamDto) {
+  // Section có thể lấy từ mẫu đề ĐGNL dùng chung (dgnlTemplateId — xem
+  // DgnlTemplatesService, tổng đã được validate = 150 lúc tạo mẫu) hoặc admin
+  // tự khai báo thủ công như trước (dto.sections) khi cần đề tuỳ biến riêng.
+  private async resolveDgnlSections(dto: GenerateExamDto) {
+    if (dto.dgnlTemplateId) {
+      const template = await this.prisma.dgnlTemplate.findUnique({
+        where: { id: dto.dgnlTemplateId },
+        include: { sections: { orderBy: { order: 'asc' } } },
+      });
+      if (!template) {
+        throw new BadRequestException('Không tìm thấy mẫu đề ĐGNL');
+      }
+      return template.sections.map((s) => ({
+        name: s.name,
+        subjectId: s.subjectId,
+        questionCount: s.questionCount,
+        maxScore: s.maxScore,
+      }));
+    }
     if (!dto.sections?.length) {
       throw new BadRequestException(
-        'Đề ĐGNL cần khai báo sections (Toán/Ngôn ngữ/Khoa học...)',
+        'Đề ĐGNL cần chọn mẫu có sẵn (dgnlTemplateId) hoặc khai báo sections thủ công',
       );
     }
+    return dto.sections;
+  }
+
+  private async generateDgnlExam(user: JwtPayload, dto: GenerateExamDto) {
+    const sections = await this.resolveDgnlSections(dto);
     if (!dto.durationMinutes) {
       throw new BadRequestException('Đề ĐGNL cần chỉ định durationMinutes');
     }
@@ -137,7 +167,11 @@ export class ExamsService {
     });
 
     let order = 1;
-    for (const [i, section] of dto.sections.entries()) {
+    // Nhiều section ĐGNL có thể trỏ cùng subjectId (vd. mẫu đề dùng lại
+    // "Toán học" cho cả 2 phần) — tích luỹ id câu hỏi đã dùng để không chọn
+    // trùng câu giữa các section, tránh vi phạm unique (examId, questionId).
+    const usedQuestionIds: string[] = [];
+    for (const [i, section] of sections.entries()) {
       const examSection = await this.prisma.examSection.create({
         data: {
           examId: exam.id,
@@ -152,8 +186,10 @@ export class ExamsService {
         type: QuestionType.MULTIPLE_CHOICE,
         count: section.questionCount,
         creatorId: user.sub,
+        excludeIds: usedQuestionIds,
       });
       for (const q of questions) {
+        usedQuestionIds.push(q.id);
         await this.prisma.examQuestion.create({
           data: {
             examId: exam.id,
@@ -324,8 +360,51 @@ export class ExamsService {
     return examQuestions;
   }
 
+  // Đồng hồ đếm giờ chỉ là hiển thị phía client — nếu học sinh bỏ dở giữa
+  // chừng (mất mạng, tắt tab) và không bao giờ bấm nộp, attempt sẽ ở
+  // IN_PROGRESS mãi mãi. Kiểm tra "lười" (không cần cron riêng): mỗi khi có
+  // ai chạm tới attempt này (mở lại đề, xem lại, lưu câu trả lời) mà phát
+  // hiện đã quá giờ, tự nộp/chấm ngay tại đây bằng chính luồng chấm điểm
+  // thật (GradingService.submitAttempt) — không viết lại logic chấm điểm.
+  private async finalizeIfExpired(
+    attempt: {
+      id: string;
+      studentId: string;
+      status: AttemptStatus;
+      startedAt: Date;
+    },
+    durationMinutes: number,
+  ): Promise<boolean> {
+    if (attempt.status !== AttemptStatus.IN_PROGRESS) return false;
+    const deadline = attempt.startedAt.getTime() + durationMinutes * 60_000;
+    if (Date.now() <= deadline) return false;
+    await this.gradingService.submitAttempt(attempt.id, {
+      sub: attempt.studentId,
+      role: Role.STUDENT,
+      email: '',
+    });
+    return true;
+  }
+
   async startAttempt(examId: string, user: JwtPayload) {
-    await this.findExamOrThrow(examId);
+    const exam = await this.findExamOrThrow(examId);
+
+    const existingInProgress = await this.prisma.examAttempt.findFirst({
+      where: {
+        examId,
+        studentId: user.sub,
+        status: AttemptStatus.IN_PROGRESS,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (existingInProgress) {
+      const expired = await this.finalizeIfExpired(
+        existingInProgress,
+        exam.durationMinutes,
+      );
+      if (!expired) return existingInProgress;
+      // Đã tự nộp bài quá hạn ở trên — để học sinh bắt đầu lượt làm mới bên dưới.
+    }
 
     // Đọc rồi mới tạo có thể bị race nếu 2 request đến gần như đồng thời (double-click,
     // React StrictMode...). Dùng transaction isolation Serializable để Postgres tự phát
@@ -376,8 +455,8 @@ export class ExamsService {
   // Đồng hồ đếm giờ ở frontend chỉ mang tính hiển thị — học sinh có thể tắt
   // tab/sửa client để bỏ qua nó. Chặn ở đây (thời điểm duy nhất còn ghi dữ
   // liệu mới vào bài làm) là nơi thực thi giới hạn thời gian thật sự: quá
-  // giờ thì không cho lưu thêm câu trả lời nữa, nhưng vẫn cho phép nộp bài
-  // (submitAttempt) để chấm điểm trên những gì đã lưu trước khi hết giờ.
+  // giờ thì tự nộp/chấm bài ngay (xem finalizeIfExpired) thay vì chỉ chặn,
+  // để điểm không bị "treo" chờ học sinh quay lại bấm nộp.
   async saveAnswer(
     attemptId: string,
     user: JwtPayload,
@@ -395,11 +474,13 @@ export class ExamsService {
       where: { id: attempt.examId },
       select: { durationMinutes: true },
     });
-    const deadline =
-      attempt.startedAt.getTime() + (exam?.durationMinutes ?? 0) * 60_000;
-    if (Date.now() > deadline) {
+    const expired = await this.finalizeIfExpired(
+      attempt,
+      exam?.durationMinutes ?? 0,
+    );
+    if (expired) {
       throw new BadRequestException(
-        'Đã hết thời gian làm bài, không thể lưu thêm câu trả lời — hãy nộp bài',
+        'Đã hết thời gian làm bài — hệ thống đã tự động nộp bài, vui lòng xem kết quả',
       );
     }
     return this.prisma.answer.upsert({
@@ -424,7 +505,15 @@ export class ExamsService {
     if (user.role === Role.STUDENT && attempt.studentId !== user.sub) {
       throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
     }
-    return attempt;
+    const expired = await this.finalizeIfExpired(
+      attempt,
+      attempt.exam.durationMinutes,
+    );
+    if (!expired) return attempt;
+    return this.prisma.examAttempt.findUniqueOrThrow({
+      where: { id },
+      include: { answers: true, exam: true },
+    });
   }
 
   // ADMIN xem toàn bộ lượt làm bài của một đề để theo dõi/thống kê.
@@ -464,7 +553,15 @@ export class ExamsService {
     if (user.role === Role.STUDENT && attempt.studentId !== user.sub) {
       throw new ForbiddenException('Bạn không có quyền xem lượt làm bài này');
     }
-    if (attempt.status === AttemptStatus.IN_PROGRESS) {
+
+    const expired = await this.finalizeIfExpired(
+      attempt,
+      attempt.exam.durationMinutes,
+    );
+    let answers = attempt.answers;
+    if (expired) {
+      answers = await this.prisma.answer.findMany({ where: { attemptId } });
+    } else if (attempt.status === AttemptStatus.IN_PROGRESS) {
       throw new BadRequestException(
         'Bài làm chưa được nộp, chưa thể xem đáp án',
       );
@@ -472,9 +569,7 @@ export class ExamsService {
 
     // AI chấm và công bố điểm ngay lập tức (kể cả tự luận Văn) — ADMIN vẫn có
     // thể điều chỉnh lại sau qua GradingService.reviewEssay.
-    const answersByQuestionId = new Map(
-      attempt.answers.map((a) => [a.questionId, a]),
-    );
+    const answersByQuestionId = new Map(answers.map((a) => [a.questionId, a]));
     return attempt.exam.examQuestions.map((eq) => {
       const answer = answersByQuestionId.get(eq.questionId);
       return {

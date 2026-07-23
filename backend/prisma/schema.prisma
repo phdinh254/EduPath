@@ -102,10 +102,11 @@ model Subject {
   code String @unique
   name String
 
-  topics        Topic[]
-  questions     Question[]
-  exams         Exam[]
-  examStructure ExamStructure?
+  topics              Topic[]
+  questions           Question[]
+  exams               Exam[]
+  examStructure       ExamStructure?
+  dgnlTemplateSections DgnlTemplateSection[]
 
   createdAt DateTime @default(now())
 }
@@ -137,6 +138,36 @@ model ExamStructureItem {
   order               Int
 
   @@index([structureId])
+}
+
+// Mẫu đề ĐGNL dùng chung (vd. "ĐGNL chuẩn 2025"): danh sách section cố định
+// (môn + số câu + thang điểm), tổng luôn 150 — admin khai báo một lần rồi
+// tái dùng mỗi khi AI ghép đề ĐGNL, thay vì phải gõ lại section thủ công mỗi
+// lần (xem ExamsService.generateDgnlExam). Khác với ExamStructure (gắn
+// cứng theo 1 môn cho đề THPT), 1 mẫu ĐGNL có thể được dùng để ghép nhiều đề
+// khác nhau (nhiều lần) mà không bị ràng buộc "duy nhất theo môn".
+model DgnlTemplate {
+  id   String @id @default(cuid())
+  name String
+
+  sections DgnlTemplateSection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DgnlTemplateSection {
+  id            String       @id @default(cuid())
+  templateId    String
+  template      DgnlTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name          String
+  subjectId     String
+  subject       Subject      @relation(fields: [subjectId], references: [id])
+  questionCount Int
+  maxScore      Float
+  order         Int
+
+  @@index([templateId])
 }
 
 model Topic {

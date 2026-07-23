@@ -38,7 +38,9 @@ export interface GenerateExamPayload {
   // (xem subjectsApi.fetchExamStructure/upsertExamStructure), không còn gửi
   // số lượng thủ công ở đây.
   subjectId?: string;
-  // ĐGNL
+  // ĐGNL — chọn 1 trong 2: dùng mẫu đề có sẵn (dgnlTemplateId) hoặc tự khai
+  // báo sections thủ công.
+  dgnlTemplateId?: string;
   sections?: GenerateExamSectionPayload[];
 }
 

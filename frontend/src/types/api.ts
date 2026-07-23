@@ -54,6 +54,24 @@ export interface ExamStructure {
   updatedAt: string;
 }
 
+export interface DgnlTemplateSection {
+  id: string;
+  templateId: string;
+  name: string;
+  subjectId: string;
+  questionCount: number;
+  maxScore: number;
+  order: number;
+}
+
+export interface DgnlTemplate {
+  id: string;
+  name: string;
+  sections: DgnlTemplateSection[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Question {
   id: string;
   subjectId: string;
