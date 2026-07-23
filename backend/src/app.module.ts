@@ -11,6 +11,7 @@ import { QuestionsModule } from './questions/questions.module';
 import { ExamsModule } from './exams/exams.module';
 import { GradingModule } from './grading/grading.module';
 import { RoadmapModule } from './roadmap/roadmap.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -26,6 +27,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
     ExamsModule,
     GradingModule,
     RoadmapModule,
+    NotificationsModule,
     AdminModule,
   ],
   controllers: [AppController],

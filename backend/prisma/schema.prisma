@@ -69,6 +69,11 @@ model User {
   dateOfBirth  DateTime?
   isActive     Boolean   @default(true)
 
+  // Mốc thời gian học sinh xem thông báo lần gần nhất — dùng để tính thông
+  // báo "lời khuyên AI mới" nào là mới so với lần xem trước, không cần bảng
+  // Notification riêng.
+  lastNotificationsReadAt DateTime?
+
   createdQuestions Question[]      @relation("QuestionCreatedBy")
   createdExams     Exam[]          @relation("ExamCreatedBy")
   examAttempts     ExamAttempt[]

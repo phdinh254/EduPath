@@ -237,3 +237,11 @@ export interface ApiErrorBody {
   error?: string;
   statusCode: number;
 }
+
+export interface StudentNotification {
+  id: string;
+  type: 'NEW_ADVICE' | 'REMINDER';
+  message: string;
+  createdAt: string;
+  subjectId?: string;
+}
