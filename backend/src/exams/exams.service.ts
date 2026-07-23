@@ -373,6 +373,11 @@ export class ExamsService {
     return attempt;
   }
 
+  // Đồng hồ đếm giờ ở frontend chỉ mang tính hiển thị — học sinh có thể tắt
+  // tab/sửa client để bỏ qua nó. Chặn ở đây (thời điểm duy nhất còn ghi dữ
+  // liệu mới vào bài làm) là nơi thực thi giới hạn thời gian thật sự: quá
+  // giờ thì không cho lưu thêm câu trả lời nữa, nhưng vẫn cho phép nộp bài
+  // (submitAttempt) để chấm điểm trên những gì đã lưu trước khi hết giờ.
   async saveAnswer(
     attemptId: string,
     user: JwtPayload,
@@ -385,6 +390,17 @@ export class ExamsService {
     }
     if (attempt.status !== AttemptStatus.IN_PROGRESS) {
       throw new BadRequestException('Lượt làm bài đã kết thúc');
+    }
+    const exam = await this.prisma.exam.findUnique({
+      where: { id: attempt.examId },
+      select: { durationMinutes: true },
+    });
+    const deadline =
+      attempt.startedAt.getTime() + (exam?.durationMinutes ?? 0) * 60_000;
+    if (Date.now() > deadline) {
+      throw new BadRequestException(
+        'Đã hết thời gian làm bài, không thể lưu thêm câu trả lời — hãy nộp bài',
+      );
     }
     return this.prisma.answer.upsert({
       where: { attemptId_questionId: { attemptId, questionId } },

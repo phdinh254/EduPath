@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { CreateTopicDto } from './dto/create-topic.dto';
@@ -51,6 +55,18 @@ export class SubjectsService {
   // đề sau đó (xem ExamsService.generateThptExam).
   async upsertExamStructure(subjectId: string, dto: UpsertExamStructureDto) {
     await this.findOne(subjectId);
+    // Đề THPT luôn theo thang điểm 10 (trừ môn chỉ có tự luận, nơi 1 câu ESSAY
+    // có thể tự chiếm trọn 10 điểm) — chặn admin cấu hình sai khiến mọi đề
+    // ghép tự động sau này lệch thang điểm mà không có cảnh báo nào.
+    const totalScore = dto.items.reduce(
+      (sum, item) => sum + item.questionCount * item.maxScorePerQuestion,
+      0,
+    );
+    if (Math.abs(totalScore - 10) > 0.01) {
+      throw new BadRequestException(
+        `Tổng điểm cấu trúc đề phải bằng 10 (hiện tại: ${totalScore})`,
+      );
+    }
     return this.prisma.$transaction(async (tx) => {
       await tx.examStructure.deleteMany({ where: { subjectId } });
       return tx.examStructure.create({
