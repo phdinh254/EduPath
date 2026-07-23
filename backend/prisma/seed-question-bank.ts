@@ -272,6 +272,137 @@ const TOAN_Q: QSeed[] = [
     '1',
     'V = (1/3)·a^2·a = a^3/3, hệ số k = 1/3, tử số 1.',
   ),
+  mc(
+    APPLICATION,
+    'Cho dãy số: 2, 5, 10, 17, 26, ... Số hạng tiếp theo của dãy là:',
+    ['35', '37', '39', '41'],
+    1,
+    'Quy luật: mỗi số hạng bằng n²+1 (n=1,2,3,...): 2,5,10,17,26,37 (n=6: 36+1=37).',
+  ),
+  mc(
+    APPLICATION,
+    'Một hình chữ nhật có chiều dài gấp đôi chiều rộng, chu vi bằng 36 cm. Tính diện tích hình chữ nhật (cm²).',
+    ['54', '72', '96', '108'],
+    1,
+    'Gọi chiều rộng x, chiều dài 2x; chu vi 2(x+2x)=36 ⇒ x=6, chiều dài=12; diện tích=6×12=72 cm².',
+  ),
+  mc(
+    APPLICATION,
+    'Giải bất phương trình 2x - 6 > 0, nghiệm là:',
+    ['x > 3', 'x < 3', 'x > -3', 'x < -3'],
+    0,
+    '2x - 6 > 0 ⇔ 2x > 6 ⇔ x > 3.',
+  ),
+  mc(
+    APPLICATION,
+    'Cho tam giác vuông có hai cạnh góc vuông là 3 và 4. Độ dài cạnh huyền là:',
+    ['5', '6', '7', '25'],
+    0,
+    'Theo định lý Pytago: cạnh huyền = √(3²+4²) = √25 = 5.',
+  ),
+  mc(
+    APPLICATION,
+    'Một lớp có 40 học sinh, trong đó 60% là học sinh nữ. Số học sinh nam là:',
+    ['16', '20', '24', '30'],
+    0,
+    'Số học sinh nữ = 40×60%=24; số học sinh nam = 40-24=16.',
+  ),
+  mc(
+    APPLICATION,
+    'Trung bình cộng của 5 số là 12. Nếu thêm số thứ 6 là 24 thì trung bình cộng mới là:',
+    ['13', '14', '15', '16'],
+    1,
+    'Tổng 5 số = 5×12=60; tổng 6 số=60+24=84; trung bình mới=84/6=14.',
+  ),
+  mc(
+    APPLICATION,
+    'Một ô tô đi quãng đường 180 km hết 3 giờ. Nếu giữ nguyên vận tốc, để đi 300 km thì cần thời gian là:',
+    ['4 giờ', '5 giờ', '6 giờ', '7 giờ'],
+    1,
+    'Vận tốc=180/3=60 km/h; thời gian đi 300km=300/60=5 giờ.',
+  ),
+  mc(
+    APPLICATION,
+    'Cho hai tập hợp A={1,2,3,4,5} và B={3,4,5,6,7}. Số phần tử của A∩B là:',
+    ['2', '3', '4', '5'],
+    1,
+    'A∩B={3,4,5}, có 3 phần tử.',
+  ),
+  mc(
+    APPLICATION,
+    'Một hình lập phương có cạnh 4 cm. Thể tích hình lập phương là:',
+    ['16 cm³', '48 cm³', '64 cm³', '128 cm³'],
+    2,
+    'Thể tích hình lập phương = cạnh³ = 4³ = 64 cm³.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Nếu x : y = 3 : 5 và x + y = 40, giá trị của x là:',
+    ['12', '15', '20', '25'],
+    1,
+    'x=3k, y=5k, 3k+5k=40 ⇒ k=5 ⇒ x=15.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Một bảng số liệu cho biết doanh thu công ty tăng từ 200 triệu lên 250 triệu. Tỉ lệ phần trăm tăng trưởng là:',
+    ['20%', '25%', '30%', '50%'],
+    1,
+    'Tỉ lệ tăng = (250-200)/200×100% = 25%.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Trong một phép thử tung một con xúc xắc cân đối, xác suất để xuất hiện mặt có số chấm chẵn là:',
+    ['1/6', '1/3', '1/2', '2/3'],
+    2,
+    'Mặt chẵn gồm {2,4,6} trong 6 mặt, xác suất = 3/6 = 1/2.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Cho hàm số bậc nhất y = 2x - 3. Đồ thị hàm số cắt trục hoành tại điểm có hoành độ bằng:',
+    ['1', '1.5', '2', '3'],
+    1,
+    'Cho y=0: 2x-3=0 ⇒ x=1,5.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Một hình vuông có diện tích 81 cm². Chu vi hình vuông là:',
+    ['9 cm', '18 cm', '36 cm', '81 cm'],
+    2,
+    'Cạnh hình vuông = √81 = 9 cm; chu vi = 4×9 = 36 cm.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Cho biểu thức A = 2³ × 3² . Giá trị của A là:',
+    ['36', '48', '72', '108'],
+    2,
+    'A = 8 × 9 = 72.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Số nào sau đây chia hết cho cả 3 và 5?',
+    ['20', '30', '35', '45'],
+    1,
+    '30 chia hết cho 3 (3+0=3) và chia hết cho 5 (tận cùng 0).',
+  ),
+  mc(
+    HIGH_APPLICATION,
+    'Ba người A, B, C cùng làm một công việc. A làm một mình xong trong 6 giờ, B làm một mình xong trong 8 giờ. Nếu A và B cùng làm thì trong 1 giờ họ hoàn thành được phần công việc là:',
+    ['1/6', '1/8', '7/24', '1/2'],
+    2,
+    'Trong 1 giờ, A làm được 1/6 công việc, B làm được 1/8 công việc; cùng làm: 1/6+1/8=4/24+3/24=7/24.',
+  ),
+  mc(
+    HIGH_APPLICATION,
+    'Cho biểu đồ cột thể hiện số lượng sách bán ra các tháng: Tháng 1: 120, Tháng 2: 150, Tháng 3: 90, Tháng 4: 180. Tháng nào có số lượng sách bán ra cao hơn trung bình 4 tháng?',
+    [
+      'Tháng 1 và Tháng 2',
+      'Tháng 2 và Tháng 4',
+      'Tháng 1 và Tháng 3',
+      'Tháng 3 và Tháng 4',
+    ],
+    1,
+    'Trung bình = (120+150+90+180)/4 = 135; các tháng có giá trị lớn hơn 135 là Tháng 2 (150) và Tháng 4 (180).',
+  ),
 ];
 
 // ---------- NGỮ VĂN 12 (essay + MC ngôn ngữ cho ĐGNL) ----------
@@ -372,6 +503,211 @@ const VAN_Q: QSeed[] = [
     ['Diễn dịch', 'Quy nạp', 'Song hành', 'Tổng - phân - hợp'],
     0,
     'Đoạn diễn dịch có câu chủ đề mang ý khái quát đặt ở đầu đoạn, các câu sau cụ thể hóa, làm rõ ý đó.',
+  ),
+  mc(
+    KNOWLEDGE,
+    'Từ nào sau đây là từ ghép đẳng lập?',
+    ['nhà cửa', 'xe đạp', 'bàn học', 'hoa hồng'],
+    0,
+    '"Nhà cửa" là từ ghép đẳng lập — hai tiếng có nghĩa gần nhau, không phân biệt tiếng chính - tiếng phụ.',
+  ),
+  mc(
+    KNOWLEDGE,
+    'Câu nào sau đây là câu ghép?',
+    [
+      'Trời mưa to.',
+      'Vì trời mưa to nên chúng tôi nghỉ học.',
+      'Chúng tôi đi học.',
+      'Bạn ấy học giỏi.',
+    ],
+    1,
+    'Câu ghép có từ hai cụm chủ - vị trở lên, không bao chứa nhau; câu trên có 2 vế nối bằng cặp quan hệ từ "vì...nên".',
+  ),
+  mc(
+    KNOWLEDGE,
+    'Từ "chân" trong câu "Anh ấy có chân trong đội tuyển quốc gia" được dùng theo nghĩa nào?',
+    ['nghĩa gốc', 'nghĩa chuyển', 'nghĩa Hán Việt', 'không có nghĩa'],
+    1,
+    '"Chân" ở đây được dùng theo nghĩa chuyển, chỉ vị trí, tư cách thành viên, không phải bộ phận cơ thể (nghĩa gốc).',
+  ),
+  mc(
+    KNOWLEDGE,
+    'Đâu là quan hệ từ trong câu: "Tôi thích đọc sách vì sách mang lại nhiều tri thức"?',
+    ['tôi', 'thích', 'vì', 'tri thức'],
+    2,
+    '"Vì" là quan hệ từ biểu thị quan hệ nguyên nhân - kết quả giữa hai vế câu.',
+  ),
+  mc(
+    KNOWLEDGE,
+    'Từ nào sau đây trái nghĩa với từ "chăm chỉ"?',
+    ['siêng năng', 'lười biếng', 'cần cù', 'nỗ lực'],
+    1,
+    '"Lười biếng" mang nghĩa trái ngược hoàn toàn với "chăm chỉ".',
+  ),
+  mc(
+    KNOWLEDGE,
+    'Xác định biện pháp tu từ trong câu: "Áo chàm đưa buổi phân li / Cầm tay nhau biết nói gì hôm nay".',
+    ['hoán dụ', 'so sánh', 'nói giảm nói tránh', 'nhân hóa'],
+    0,
+    '"Áo chàm" là hình ảnh hoán dụ, dùng trang phục đặc trưng để chỉ người dân Việt Bắc.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Đọc câu sau và cho biết lỗi sai: "Qua tác phẩm cho thấy tác giả rất yêu quê hương." Câu mắc lỗi gì?',
+    ['thiếu chủ ngữ', 'thiếu vị ngữ', 'sai quan hệ từ', 'lặp từ'],
+    0,
+    'Câu thiếu chủ ngữ do dùng sai cấu trúc "Qua... cho thấy" khiến cả câu chỉ có trạng ngữ và vị ngữ, không có chủ ngữ rõ ràng.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Trong đoạn văn nghị luận, câu nào sau đây có chức năng là luận cứ?',
+    [
+      'Chúng ta cần bảo vệ môi trường.',
+      'Theo thống kê, mỗi năm có hàng triệu tấn rác thải nhựa đổ ra biển.',
+      'Vậy môi trường rất quan trọng.',
+      'Hãy cùng nhau hành động.',
+    ],
+    1,
+    'Câu nêu số liệu thống kê là luận cứ (dẫn chứng, lí lẽ) dùng để làm sáng tỏ luận điểm.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Đọc đoạn văn: "Mưa. Mưa rơi tí tách trên mái nhà. Mưa gõ cửa từng ô kính." Việc lặp lại từ "mưa" có tác dụng gì?',
+    [
+      'nhấn mạnh, tạo nhịp điệu và không khí của cơn mưa',
+      'gây lỗi lặp từ cần sửa',
+      'không có tác dụng gì đặc biệt',
+      'làm câu văn khó hiểu',
+    ],
+    0,
+    'Phép lặp từ "mưa" tạo nhịp điệu, nhấn mạnh cảm giác về cơn mưa đang diễn ra liên tục.',
+  ),
+  mc(
+    COMPREHENSION,
+    'Xác định phong cách ngôn ngữ của văn bản: "Điều 8. Người lao động có quyền... theo quy định của pháp luật."',
+    [
+      'phong cách ngôn ngữ hành chính',
+      'phong cách ngôn ngữ nghệ thuật',
+      'phong cách ngôn ngữ sinh hoạt',
+      'phong cách ngôn ngữ báo chí',
+    ],
+    0,
+    'Văn bản có cấu trúc điều khoản, ngôn ngữ chính xác, khách quan — đặc trưng của phong cách ngôn ngữ hành chính (văn bản pháp luật).',
+  ),
+  mc(
+    COMPREHENSION,
+    'Câu nào sau đây sử dụng đúng dấu câu?',
+    [
+      'Hôm nay, trời đẹp quá.',
+      'Hôm nay trời, đẹp quá.',
+      'Hôm nay trời đẹp, quá.',
+      'Hôm, nay trời đẹp quá.',
+    ],
+    0,
+    'Dấu phẩy dùng sau trạng ngữ chỉ thời gian "Hôm nay" là đúng quy tắc; các phương án còn lại đặt dấu phẩy sai vị trí.',
+  ),
+  mc(
+    APPLICATION,
+    'Đọc đoạn văn: "Nhiều nghiên cứu cho thấy trẻ em đọc sách thường xuyên có vốn từ vựng phong phú hơn và tư duy logic tốt hơn." Ý chính của đoạn văn là gì?',
+    [
+      'đọc sách giúp trẻ phát triển ngôn ngữ và tư duy',
+      'trẻ em không thích đọc sách',
+      'sách chỉ có tác dụng giải trí',
+      'nghiên cứu khoa học không đáng tin cậy',
+    ],
+    0,
+    'Đoạn văn nêu lợi ích của việc đọc sách đối với sự phát triển ngôn ngữ và tư duy logic của trẻ em.',
+  ),
+  mc(
+    APPLICATION,
+    'Câu nào diễn đạt lại chính xác nhất ý của câu: "Không ai có thể phủ nhận vai trò của giáo dục đối với sự phát triển của một quốc gia"?',
+    [
+      'Giáo dục đóng vai trò quan trọng, được mọi người công nhận, đối với sự phát triển quốc gia.',
+      'Giáo dục không quan trọng với sự phát triển quốc gia.',
+      'Một số người phủ nhận vai trò của giáo dục.',
+      'Giáo dục chỉ quan trọng ở một số quốc gia.',
+    ],
+    0,
+    'Câu gốc khẳng định (bằng phủ định của phủ định) rằng vai trò của giáo dục là điều ai cũng công nhận.',
+  ),
+  mc(
+    APPLICATION,
+    'Xác định lỗi trong câu: "Bằng tinh thần đoàn kết đã giúp dân tộc ta vượt qua nhiều khó khăn."',
+    [
+      'nhầm trạng ngữ thành chủ ngữ, câu thiếu chủ ngữ',
+      'câu đúng ngữ pháp',
+      'thiếu vị ngữ',
+      'sai quan hệ từ',
+    ],
+    0,
+    'Cụm "Bằng tinh thần đoàn kết" là trạng ngữ chỉ phương tiện, không thể làm chủ ngữ, khiến câu thiếu chủ ngữ.',
+  ),
+  mc(
+    APPLICATION,
+    'Đọc câu: "Nếu không có sự hi sinh thầm lặng của các y bác sĩ thì đại dịch đã gây ra hậu quả nặng nề hơn nhiều." Đây là kiểu câu điều kiện diễn tả điều gì?',
+    [
+      'một giả định trái với thực tế đã xảy ra',
+      'một quy luật tự nhiên luôn đúng',
+      'một dự đoán về tương lai',
+      'một mệnh lệnh',
+    ],
+    0,
+    'Cấu trúc "Nếu không có... thì đã..." diễn tả một giả định trái với thực tế đã xảy ra trong quá khứ.',
+  ),
+  mc(
+    APPLICATION,
+    'Trong văn nghị luận, thao tác lập luận "so sánh" có tác dụng chủ yếu là gì?',
+    [
+      'làm rõ đối tượng bằng cách đối chiếu với đối tượng khác có điểm tương đồng hoặc khác biệt',
+      'chỉ để liệt kê thông tin',
+      'thay thế hoàn toàn cho luận điểm',
+      'không có tác dụng trong nghị luận',
+    ],
+    0,
+    'So sánh giúp làm nổi bật đặc điểm của đối tượng được bàn luận thông qua đối chiếu với đối tượng khác.',
+  ),
+  mc(
+    HIGH_APPLICATION,
+    'Đọc đoạn văn: "Có người cho rằng thất bại là mẹ thành công. Nhưng thất bại chỉ thực sự có ý nghĩa khi con người biết đứng dậy và rút ra bài học." Quan điểm chính mà đoạn văn muốn nhấn mạnh là gì?',
+    [
+      'giá trị của thất bại phụ thuộc vào thái độ và hành động sau đó của con người',
+      'thất bại luôn dẫn đến thành công',
+      'nên tránh mọi thất bại bằng mọi giá',
+      'thất bại không có ý nghĩa gì',
+    ],
+    0,
+    'Đoạn văn nhấn mạnh: thất bại chỉ có giá trị khi con người biết rút kinh nghiệm và đứng dậy, chứ không tự động dẫn đến thành công.',
+  ),
+  mc(
+    HIGH_APPLICATION,
+    'Xác định quan hệ ý nghĩa giữa hai vế câu: "Tuy hoàn cảnh gia đình khó khăn nhưng em vẫn học giỏi và luôn lạc quan."',
+    [
+      'quan hệ tương phản (nhượng bộ)',
+      'quan hệ nguyên nhân - kết quả',
+      'quan hệ điều kiện - kết quả',
+      'quan hệ tăng tiến',
+    ],
+    0,
+    'Cặp quan hệ từ "Tuy... nhưng" biểu thị quan hệ tương phản/nhượng bộ giữa hoàn cảnh khó khăn và kết quả học tập tốt.',
+  ),
+  mc(
+    HIGH_APPLICATION,
+    'Đọc câu: "Chính sự im lặng đáng sợ ấy mới là điều khiến người ta ám ảnh, chứ không phải tiếng la hét." Biện pháp tu từ nào được sử dụng để nhấn mạnh ý nghĩa nghịch lý?',
+    ['tương phản (đối lập)', 'so sánh ngang bằng', 'liệt kê', 'điệp cấu trúc'],
+    0,
+    'Tác giả đặt "sự im lặng" đối lập với "tiếng la hét" để nhấn mạnh ý nghĩa nghịch lý: cái im lặng đáng sợ hơn cái ồn ào.',
+  ),
+  mc(
+    HIGH_APPLICATION,
+    'Trong một bài phát biểu, câu nào sau đây thể hiện rõ nhất lập luận theo phương pháp diễn dịch?',
+    [
+      'Nêu luận điểm khái quát trước, sau đó đưa dẫn chứng cụ thể để chứng minh.',
+      'Nêu dẫn chứng cụ thể trước, từ đó khái quát thành luận điểm.',
+      'Chỉ liệt kê dẫn chứng mà không có luận điểm.',
+      'Không có trình tự lập luận rõ ràng.',
+    ],
+    0,
+    'Diễn dịch là phương pháp lập luận đi từ ý khái quát (luận điểm) đến ý cụ thể (dẫn chứng, luận cứ).',
   ),
 ];
 
@@ -2083,6 +2419,313 @@ const DIA_Q: QSeed[] = [
   ),
 ];
 
+// ---------- TƯ DUY KHOA HỌC (ĐGNL — logic/phân tích số liệu + suy luận khoa học) ----------
+const TUDUYKH_TOPICS = ['Logic và phân tích số liệu', 'Suy luận khoa học'];
+const TUDUYKH_Q: QSeed[] = [
+  // 3.1 Logic, phân tích số liệu (12 câu)
+  mc(
+    APPLICATION,
+    'Trong một cuộc thi, A xếp trên B, C xếp trên D, B xếp trên C. Thứ tự xếp hạng từ cao đến thấp là:',
+    ['A, B, C, D', 'A, C, B, D', 'B, A, C, D', 'A, B, D, C'],
+    0,
+    'Từ A>B, B>C, C>D suy ra thứ tự: A > B > C > D.',
+  ),
+  mc(
+    APPLICATION,
+    'Nếu tất cả các số chẵn đều chia hết cho 2, và 8 là số chẵn thì:',
+    [
+      '8 chia hết cho 2',
+      '8 không chia hết cho 2',
+      'không thể kết luận',
+      '8 là số lẻ',
+    ],
+    0,
+    'Áp dụng suy luận diễn dịch (tam đoạn luận): tiền đề đúng nên kết luận "8 chia hết cho 2" là chắc chắn đúng.',
+  ),
+  mc(
+    APPLICATION,
+    'Một dãy số: 3, 6, 12, 24, 48, ... Số hạng tiếp theo là:',
+    ['72', '84', '96', '108'],
+    2,
+    'Quy luật: mỗi số hạng gấp đôi số hạng trước; 48×2=96.',
+  ),
+  mc(
+    APPLICATION,
+    'Bảng số liệu cho biết doanh số 4 quý của một công ty: Q1: 50, Q2: 70, Q3: 60, Q4: 90 (đơn vị: tỷ đồng). Quý nào có mức tăng trưởng so với quý trước đó cao nhất?',
+    ['Q2', 'Q3', 'Q4', 'không quý nào tăng'],
+    2,
+    'Mức tăng: Q2 so Q1 = +20; Q3 so Q2 = -10; Q4 so Q3 = +30. Q4 có mức tăng cao nhất (+30).',
+  ),
+  mc(
+    APPLICATION,
+    'Có 5 người xếp hàng: An đứng ngay trước Bình, Bình đứng ngay trước Chi. Nếu Chi đứng vị trí thứ 3 thì An đứng vị trí thứ:',
+    ['1', '2', '3', '4'],
+    0,
+    'Chi vị trí 3 → Bình vị trí 2 (ngay trước Chi) → An vị trí 1 (ngay trước Bình).',
+  ),
+  mc(
+    APPLICATION,
+    'Trong một nhóm 30 người, có 18 người thích cà phê, 15 người thích trà, 8 người thích cả hai. Số người không thích cả cà phê lẫn trà là:',
+    ['3', '5', '7', '10'],
+    1,
+    'Số người thích ít nhất 1 loại = 18+15-8=25; số không thích loại nào = 30-25=5.',
+  ),
+  mc(
+    APPLICATION,
+    'Cho quy luật: mỗi hình vuông có số chấm bằng bình phương số thứ tự của nó (hình 1: 1 chấm, hình 2: 4 chấm, hình 3: 9 chấm...). Hình thứ 5 có số chấm là:',
+    ['16', '20', '25', '30'],
+    2,
+    'Số chấm hình thứ n = n²; hình thứ 5 có 5²=25 chấm.',
+  ),
+  mc(
+    APPLICATION,
+    'Biểu đồ tròn thể hiện cơ cấu chi tiêu hộ gia đình: Ăn uống 40%, Giáo dục 20%, Y tế 15%, Khác 25%. Nếu tổng chi tiêu là 20 triệu đồng, số tiền chi cho Giáo dục là:',
+    ['3 triệu', '4 triệu', '5 triệu', '6 triệu'],
+    1,
+    'Chi cho Giáo dục = 20 triệu × 20% = 4 triệu đồng.',
+  ),
+  mc(
+    APPLICATION,
+    'Nếu "Mọi học sinh giỏi đều chăm học" và "Nam không chăm học" thì có thể kết luận gì về Nam?',
+    [
+      'Nam không phải học sinh giỏi',
+      'Nam là học sinh giỏi',
+      'không thể kết luận',
+      'Nam học kém',
+    ],
+    0,
+    'Theo suy luận phản đảo (modus tollens): nếu "giỏi→chăm học" và "Nam không chăm học" thì "Nam không giỏi".',
+  ),
+  mc(
+    APPLICATION,
+    'Ba hộp bi có tổng cộng 84 viên. Hộp A có nhiều gấp đôi hộp B, hộp B có nhiều gấp đôi hộp C. Số bi của hộp C là:',
+    ['10', '12', '15', '20'],
+    1,
+    'Gọi số bi hộp C là x, hộp B=2x, hộp A=4x; tổng: x+2x+4x=84 ⇒ 7x=84 ⇒ x=12.',
+  ),
+  mc(
+    APPLICATION,
+    'Cho bảng dữ liệu nhiệt độ 5 ngày: 22°C, 25°C, 23°C, 27°C, 24°C. Nhiệt độ trung bình của 5 ngày là:',
+    ['23.4°C', '24.2°C', '25°C', '26°C'],
+    1,
+    'Trung bình = (22+25+23+27+24)/5 = 121/5 = 24,2°C.',
+  ),
+  mc(
+    APPLICATION,
+    'Trong một dãy các hình lặp lại theo chu kỳ: tam giác, vuông, tròn, tam giác, vuông, tròn,... Hình thứ 20 trong dãy là hình gì?',
+    ['tam giác', 'vuông', 'tròn', 'không xác định được'],
+    1,
+    'Chu kỳ lặp lại sau mỗi 3 hình; 20 chia 3 dư 2, ứng với vị trí thứ 2 trong chu kỳ là hình vuông.',
+  ),
+  // 3.2 Suy luận khoa học (18 câu)
+  mc(
+    APPLICATION,
+    'Một nhà khoa học quan sát: cây trồng ở nơi có nhiều ánh sáng phát triển nhanh hơn cây trồng trong bóng râm, các điều kiện khác như nhau. Kết luận hợp lý nhất là:',
+    [
+      'ánh sáng ảnh hưởng tích cực đến tốc độ phát triển của cây',
+      'ánh sáng không ảnh hưởng đến cây',
+      'bóng râm giúp cây phát triển nhanh hơn',
+      'không thể rút ra kết luận nào',
+    ],
+    0,
+    'Khi các điều kiện khác được kiểm soát như nhau, sự khác biệt duy nhất (ánh sáng) là nguyên nhân hợp lý nhất giải thích cho sự khác biệt về tốc độ phát triển.',
+  ),
+  mc(
+    APPLICATION,
+    'Thí nghiệm: đun nóng một thanh kim loại thì thanh kim loại dài ra. Đây là bằng chứng cho hiện tượng nào?',
+    [
+      'sự giãn nở nhiệt của vật rắn',
+      'sự nóng chảy của kim loại',
+      'sự thăng hoa',
+      'sự bay hơi',
+    ],
+    0,
+    'Khi nhiệt độ tăng, các phân tử dao động mạnh hơn làm vật rắn giãn nở — đây là hiện tượng giãn nở nhiệt.',
+  ),
+  mc(
+    APPLICATION,
+    'Trong một thí nghiệm, hai cốc nước cùng thể tích và nhiệt độ ban đầu, một cốc được đậy kín, một cốc để hở. Sau 1 ngày, cốc để hở có lượng nước giảm nhiều hơn. Giải thích hợp lý là:',
+    [
+      'nước bay hơi ra không khí nhanh hơn khi cốc để hở',
+      'nước trong cốc kín bị đông đặc',
+      'không có sự khác biệt thực sự',
+      'cốc đậy kín làm nước bay hơi nhanh hơn',
+    ],
+    0,
+    'Cốc để hở tạo điều kiện cho hơi nước thoát ra ngoài không khí dễ dàng hơn, làm lượng nước giảm nhanh hơn do bay hơi.',
+  ),
+  mc(
+    APPLICATION,
+    'Một quần thể vi khuẩn tăng gấp đôi sau mỗi 20 phút. Nếu ban đầu có 100 vi khuẩn, sau 1 giờ số lượng vi khuẩn là:',
+    ['200', '400', '800', '1000'],
+    2,
+    'Sau 1 giờ (60 phút) có 3 chu kỳ nhân đôi (60/20=3): 100→200→400→800.',
+  ),
+  mc(
+    APPLICATION,
+    'Nhà nghiên cứu nhận thấy khu vực có mật độ cây xanh cao thường có nhiệt độ không khí thấp hơn khu vực bê tông hóa. Nguyên nhân khoa học hợp lý nhất là:',
+    [
+      'cây xanh thoát hơi nước và tạo bóng mát, giúp giảm nhiệt độ môi trường xung quanh',
+      'cây xanh không ảnh hưởng đến nhiệt độ',
+      'bê tông hấp thụ ít nhiệt hơn cây xanh',
+      'không có mối liên hệ nào',
+    ],
+    0,
+    'Cây xanh thoát hơi nước (làm mát bay hơi) và che bóng, giảm hấp thụ bức xạ mặt trời, từ đó làm giảm nhiệt độ môi trường xung quanh so với bề mặt bê tông hấp thụ nhiệt.',
+  ),
+  mc(
+    APPLICATION,
+    'Trong một thí nghiệm hóa học, khi nhỏ dung dịch quỳ tím vào một dung dịch không màu thì quỳ tím chuyển sang màu đỏ. Dung dịch đó có tính chất gì?',
+    ['tính axit', 'tính bazơ', 'trung tính', 'tính oxi hóa mạnh'],
+    0,
+    'Quỳ tím chuyển đỏ trong môi trường axit; đây là dấu hiệu nhận biết dung dịch có tính axit.',
+  ),
+  mc(
+    APPLICATION,
+    'Một học sinh thả một vật nặng và một tờ giấy phẳng từ cùng độ cao trong không khí, vật nặng rơi xuống đất trước. Nếu thực hiện lại thí nghiệm trong môi trường chân không, kết quả dự đoán là:',
+    [
+      'cả hai rơi xuống đất cùng lúc',
+      'vật nặng vẫn rơi trước',
+      'tờ giấy rơi trước',
+      'không vật nào rơi',
+    ],
+    0,
+    'Trong chân không, không có lực cản không khí nên mọi vật rơi tự do với cùng gia tốc trọng trường, chạm đất cùng lúc (thí nghiệm nổi tiếng của Galileo).',
+  ),
+  mc(
+    APPLICATION,
+    'Biểu đồ cho thấy khi nồng độ CO2 trong khí quyển tăng, nhiệt độ trung bình toàn cầu cũng có xu hướng tăng theo. Nhận định nào sau đây là hợp lý và thận trọng nhất về mối quan hệ này?',
+    [
+      'dữ liệu cho thấy mối tương quan giữa hai đại lượng, cần thêm nghiên cứu để khẳng định quan hệ nhân quả',
+      'CO2 chắc chắn là nguyên nhân duy nhất gây biến đổi khí hậu',
+      'không có mối liên hệ nào giữa hai đại lượng',
+      'nhiệt độ tăng là nguyên nhân làm tăng CO2 và chỉ có chiều đó',
+    ],
+    0,
+    'Tương quan giữa hai đại lượng trong dữ liệu quan sát không tự động chứng minh quan hệ nhân quả một chiều tuyệt đối; kết luận khoa học thận trọng cần thêm bằng chứng cơ chế, dù trong trường hợp CO2-khí hậu bằng chứng nhân quả đã rất mạnh.',
+  ),
+  mc(
+    APPLICATION,
+    'Trong một thí nghiệm về phản xạ có điều kiện, chó tiết nước bọt khi nghe tiếng chuông sau nhiều lần chuông reo kèm thức ăn. Đây là minh chứng cho:',
+    [
+      'phản xạ có điều kiện được hình thành qua học tập, liên kết hai kích thích',
+      'phản xạ không điều kiện bẩm sinh',
+      'bản năng sinh tồn',
+      'đột biến gen',
+    ],
+    0,
+    'Đây là thí nghiệm kinh điển của Pavlov, minh chứng cho phản xạ có điều kiện — hình thành qua quá trình học tập, liên kết kích thích trung tính (chuông) với kích thích có ý nghĩa (thức ăn).',
+  ),
+  mc(
+    APPLICATION,
+    'Một nhà khoa học đo được: mẫu đá A có nhiều lớp trầm tích chồng lên nhau. Theo nguyên lý địa tầng học, lớp nằm dưới cùng so với các lớp phía trên có đặc điểm gì?',
+    [
+      'thường hình thành trước và có tuổi già hơn',
+      'thường hình thành sau và có tuổi trẻ hơn',
+      'luôn cùng tuổi với lớp trên',
+      'không thể xác định được tuổi tương đối',
+    ],
+    0,
+    'Theo nguyên lý chồng lớp (superposition) trong địa chất học, lớp trầm tích nằm dưới hình thành trước nên có tuổi già hơn các lớp nằm trên.',
+  ),
+  mc(
+    APPLICATION,
+    'Trong một thí nghiệm kiểm tra ảnh hưởng của phân bón đến sự phát triển của cây, nhóm đối chứng (không bón phân) được thiết lập nhằm mục đích gì?',
+    [
+      'làm cơ sở so sánh để xác định tác động thực sự của phân bón',
+      'không có mục đích cụ thể',
+      'để tiết kiệm chi phí thí nghiệm',
+      'để cây phát triển tốt hơn',
+    ],
+    0,
+    'Nhóm đối chứng giúp loại trừ các yếu tố gây nhiễu khác, làm cơ sở so sánh để xác định chính xác tác động của biến số đang nghiên cứu (phân bón).',
+  ),
+  mc(
+    APPLICATION,
+    'Một mạch điện đơn giản gồm pin, dây dẫn và bóng đèn. Nếu ngắt một điểm bất kỳ trên dây dẫn mạch nối tiếp, hiện tượng xảy ra là:',
+    [
+      'bóng đèn tắt vì mạch bị hở',
+      'bóng đèn sáng hơn',
+      'bóng đèn không đổi',
+      'pin bị đoản mạch',
+    ],
+    0,
+    'Trong mạch nối tiếp, dòng điện chỉ có một đường đi; ngắt bất kỳ điểm nào cũng làm mạch hở, dòng điện không thể chạy qua nên bóng đèn tắt.',
+  ),
+  mc(
+    APPLICATION,
+    'Khi trộn muối ăn (NaCl) vào nước, muối tan hết và không nhìn thấy bằng mắt thường. Đây là ví dụ về:',
+    [
+      'hiện tượng vật lý (hòa tan), không tạo ra chất mới',
+      'phản ứng hóa học tạo ra chất mới',
+      'phản ứng hạt nhân',
+      'sự thăng hoa',
+    ],
+    0,
+    'Hòa tan muối trong nước là hiện tượng vật lý — các phân tử NaCl phân tán vào nước, không có chất mới nào được tạo thành.',
+  ),
+  mc(
+    APPLICATION,
+    'Trong quá trình quang hợp, thực vật hấp thụ khí CO2 và thải ra khí O2 dưới tác dụng của ánh sáng. Nếu che kín hoàn toàn một cây trong bóng tối nhiều ngày, dự đoán hợp lý là:',
+    [
+      'cây sẽ ngừng quang hợp và dần suy yếu do thiếu năng lượng',
+      'cây sẽ quang hợp mạnh hơn',
+      'cây không bị ảnh hưởng gì',
+      'cây sẽ thải ra nhiều O2 hơn',
+    ],
+    0,
+    'Không có ánh sáng, thực vật không thể thực hiện quang hợp để tạo năng lượng, dẫn đến suy yếu dần nếu tình trạng kéo dài.',
+  ),
+  mc(
+    APPLICATION,
+    'Một vật có khối lượng lớn hơn có luôn rơi nhanh hơn vật có khối lượng nhỏ hơn khi thả tự do trong cùng môi trường không khí không?',
+    [
+      'không nhất thiết, còn phụ thuộc vào lực cản không khí tác dụng lên từng vật',
+      'luôn luôn đúng',
+      'không bao giờ đúng',
+      'chỉ đúng với kim loại',
+    ],
+    0,
+    'Trong không khí, lực cản phụ thuộc vào hình dạng, diện tích bề mặt vật, không chỉ khối lượng — vật nặng có thể rơi chậm hơn nếu diện tích cản gió lớn (như tờ giấy vo tròn so với xòe phẳng).',
+  ),
+  mc(
+    APPLICATION,
+    'Một nghiên cứu dịch tễ học ghi nhận nhóm người hút thuốc lá có tỉ lệ mắc bệnh phổi cao hơn đáng kể so với nhóm không hút thuốc, sau khi đã kiểm soát các yếu tố khác. Kết luận khoa học rút ra là:',
+    [
+      'có mối liên hệ giữa hút thuốc lá và nguy cơ mắc bệnh phổi',
+      'hút thuốc lá hoàn toàn không liên quan đến bệnh phổi',
+      'chỉ có yếu tố di truyền quyết định bệnh phổi',
+      'không thể rút ra kết luận gì từ dữ liệu dịch tễ học',
+    ],
+    0,
+    'Khi đã kiểm soát các yếu tố gây nhiễu khác, sự khác biệt rõ rệt về tỉ lệ mắc bệnh giữa hai nhóm cho thấy mối liên hệ giữa hút thuốc và nguy cơ mắc bệnh phổi.',
+  ),
+  mc(
+    APPLICATION,
+    'Trong thí nghiệm Mendel về di truyền, việc lai các cây đậu Hà Lan thuần chủng khác nhau về một tính trạng qua nhiều thế hệ giúp phát hiện ra quy luật nào?',
+    [
+      'quy luật phân li tính trạng',
+      'quy luật liên kết gen hoàn toàn',
+      'quy luật hoán vị gen',
+      'quy luật di truyền ngoài nhân',
+    ],
+    0,
+    'Thí nghiệm lai một cặp tính trạng của Mendel trên đậu Hà Lan là cơ sở phát hiện ra quy luật phân li của các nhân tố di truyền (gen).',
+  ),
+  mc(
+    APPLICATION,
+    'Một chiếc thuyền nổi được trên mặt nước dù làm bằng kim loại (vật liệu nặng hơn nước). Hiện tượng này được giải thích bằng nguyên lý nào?',
+    [
+      'nguyên lý Archimedes (lực đẩy Ác-si-mét phụ thuộc vào thể tích chiếm chỗ, không chỉ khối lượng riêng vật liệu)',
+      'định luật bảo toàn năng lượng',
+      'định luật Newton thứ ba',
+      'nguyên lý Pascal',
+    ],
+    0,
+    'Thuyền nổi được vì hình dạng rỗng làm thể tích nước bị chiếm chỗ lớn, tạo ra lực đẩy Ác-si-mét đủ lớn cân bằng với trọng lượng thuyền, dù vật liệu (kim loại) nặng hơn nước.',
+  ),
+];
+
 async function upsertSubjectBank(params: {
   code: string;
   name: string;
@@ -2277,7 +2920,7 @@ async function main() {
     ],
   });
 
-  const ly = await upsertSubjectBank({
+  await upsertSubjectBank({
     code: 'LY2025',
     name: 'Vật lý',
     durationMinutes: 50,
@@ -2318,7 +2961,7 @@ async function main() {
     ],
   });
 
-  const hoa = await upsertSubjectBank({
+  await upsertSubjectBank({
     code: 'HOA2025',
     name: 'Hóa học',
     durationMinutes: 50,
@@ -2359,7 +3002,7 @@ async function main() {
     ],
   });
 
-  const sinh = await upsertSubjectBank({
+  await upsertSubjectBank({
     code: 'SINH2025',
     name: 'Sinh học',
     durationMinutes: 50,
@@ -2400,7 +3043,7 @@ async function main() {
     ],
   });
 
-  const su = await upsertSubjectBank({
+  await upsertSubjectBank({
     code: 'SU2025',
     name: 'Lịch sử',
     durationMinutes: 50,
@@ -2429,7 +3072,7 @@ async function main() {
     ],
   });
 
-  const dia = await upsertSubjectBank({
+  await upsertSubjectBank({
     code: 'DIA2025',
     name: 'Địa lý',
     durationMinutes: 50,
@@ -2470,8 +3113,26 @@ async function main() {
     ],
   });
 
-  // ---------- ĐGNL: mẫu đề dùng chung ----------
-  const templateName = 'ĐGNL chuẩn 2025 — đầy đủ 8 môn';
+  // Môn riêng cho phần "Tư duy khoa học" của ĐGNL — không gắn với môn THPT
+  // nào cụ thể (đúng bản chất liên môn của phần thi này), nên không cấu hình
+  // ExamStructure (structureItems rỗng) — chọn nhầm cho đề THPT sẽ báo lỗi rõ
+  // ràng thay vì sinh đề sai.
+  const tuduykh = await upsertSubjectBank({
+    code: 'TUDUYKH2026',
+    name: 'Tư duy khoa học',
+    durationMinutes: 150,
+    topics: TUDUYKH_TOPICS,
+    questions: TUDUYKH_Q,
+    adminId: admin.id,
+    structureItems: [],
+  });
+
+  // ---------- ĐGNL: mẫu đề V-ACT 2026 (ĐHQG TP.HCM) ----------
+  // Nguồn: cấu trúc chính thức V-ACT 2026 — 120 câu trắc nghiệm, 150 phút:
+  // Phần 1 Sử dụng ngôn ngữ (60 câu: 30 Tiếng Việt + 30 Tiếng Anh), Phần 2
+  // Toán học (30 câu), Phần 3 Tư duy khoa học (30 câu: 12 logic/phân tích số
+  // liệu + 18 suy luận khoa học). Thang điểm quy đổi đều 150/120 = 1,25đ/câu.
+  const templateName = 'ĐGNL V-ACT 2026 (ĐHQG TP.HCM)';
   await prisma.dgnlTemplateSection.deleteMany({
     where: { template: { name: templateName } },
   });
@@ -2486,54 +3147,42 @@ async function main() {
     maxScore: number;
   }[] = [
     {
-      name: 'Ngôn ngữ - Tiếng Việt',
+      name: 'Sử dụng ngôn ngữ - Tiếng Việt',
       subjectId: van.id,
-      questionCount: 10,
-      maxScore: 20,
+      questionCount: 30,
+      maxScore: 37.5,
     },
     {
-      name: 'Ngôn ngữ - Tiếng Anh',
+      name: 'Sử dụng ngôn ngữ - Tiếng Anh',
       subjectId: anh.id,
-      questionCount: 10,
-      maxScore: 20,
+      questionCount: 30,
+      maxScore: 37.5,
     },
     {
-      name: 'Toán học, tư duy logic',
+      name: 'Toán học',
       subjectId: toan.id,
+      questionCount: 30,
+      maxScore: 37.5,
+    },
+    {
+      name: 'Tư duy khoa học - Logic, phân tích số liệu',
+      subjectId: tuduykh.id,
       questionCount: 12,
-      maxScore: 30,
+      maxScore: 15,
     },
     {
-      name: 'Khoa học - Vật lý',
-      subjectId: ly.id,
-      questionCount: 8,
-      maxScore: 16,
-    },
-    {
-      name: 'Khoa học - Hóa học',
-      subjectId: hoa.id,
-      questionCount: 8,
-      maxScore: 16,
-    },
-    {
-      name: 'Khoa học - Sinh học',
-      subjectId: sinh.id,
-      questionCount: 8,
-      maxScore: 16,
-    },
-    {
-      name: 'Khoa học xã hội - Lịch sử',
-      subjectId: su.id,
-      questionCount: 8,
-      maxScore: 16,
-    },
-    {
-      name: 'Khoa học xã hội - Địa lý',
-      subjectId: dia.id,
-      questionCount: 8,
-      maxScore: 16,
+      name: 'Tư duy khoa học - Suy luận khoa học',
+      subjectId: tuduykh.id,
+      questionCount: 18,
+      maxScore: 22.5,
     },
   ];
+  const totalQuestions = sections.reduce((s, x) => s + x.questionCount, 0);
+  if (totalQuestions !== 120) {
+    throw new Error(
+      `Tổng số câu mẫu ĐGNL V-ACT phải bằng 120, hiện tại ${totalQuestions}`,
+    );
+  }
   const totalScore = sections.reduce((s, x) => s + x.maxScore, 0);
   if (Math.abs(totalScore - 150) > 0.01) {
     throw new Error(`Tổng điểm mẫu ĐGNL phải bằng 150, hiện tại ${totalScore}`);
@@ -2551,7 +3200,7 @@ async function main() {
     });
   }
   console.log(
-    `✓ Mẫu ĐGNL "${templateName}": ${sections.length} phần, tổng ${totalScore} điểm`,
+    `✓ Mẫu ĐGNL "${templateName}": ${sections.length} phần, ${totalQuestions} câu, tổng ${totalScore} điểm`,
   );
 }
 
