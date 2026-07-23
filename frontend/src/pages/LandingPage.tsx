@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Logo } from '../components/Logo';
+import { CountUpStat, useInViewOnce } from '../components/CountUpStat';
 
 const FEATURES = [
   {
@@ -76,6 +77,8 @@ const EXAM_TYPES = [
 ];
 
 export function LandingPage() {
+  const { ref: statsRef, inView: statsInView } = useInViewOnce<HTMLDivElement>();
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-white dark:bg-slate-950">
       {/* Nav */}
@@ -141,10 +144,21 @@ export function LandingPage() {
 
         {/* Stats bar */}
         <div className="mx-auto max-w-5xl px-6">
-          <div className="grid grid-cols-2 gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:grid-cols-4 dark:border-slate-800 dark:bg-slate-900">
-            {STATS.map((s) => (
-              <div key={s.label} className="text-center">
-                <p className="text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-white">{s.value}</p>
+          <div
+            ref={statsRef}
+            className="grid grid-cols-2 gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:grid-cols-4 dark:border-slate-800 dark:bg-slate-900"
+          >
+            {STATS.map((s, i) => (
+              <div
+                key={s.label}
+                className={`text-center transition-all duration-500 ${
+                  statsInView ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'
+                }`}
+                style={{ transitionDelay: `${i * 100}ms` }}
+              >
+                <p className="tabular-nums text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-white">
+                  <CountUpStat value={s.value} active={statsInView} />
+                </p>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{s.label}</p>
               </div>
             ))}
