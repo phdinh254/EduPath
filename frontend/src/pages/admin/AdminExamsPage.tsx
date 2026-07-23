@@ -19,7 +19,7 @@ import { useToast } from '../../components/ToastProvider';
 import { Modal } from '../../components/Modal';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
 import { Badge, Button, CardLink, PageHeader } from '../../components/ui/Card';
-import { ClockIcon, FileTextIcon } from '../../components/ui/Icons';
+import { ClockIcon, FileTextIcon, XIcon } from '../../components/ui/Icons';
 import type { DifficultyLevel, ExamCategory, QuestionType } from '../../types/api';
 
 const TYPE_LABEL: Record<QuestionType, string> = {
@@ -146,6 +146,14 @@ function DgnlTemplateManagerModal({ onClose }: { onClose: () => void }) {
     setSections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
   }
 
+  function addSection() {
+    setSections((prev) => [...prev, { name: '', subjectId: '', questionCount: 10, maxScore: 10 }]);
+  }
+
+  function removeSection(index: number) {
+    setSections((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -204,12 +212,23 @@ function DgnlTemplateManagerModal({ onClose }: { onClose: () => void }) {
             <p className="text-xs text-slate-500">Tổng thang điểm phải bằng 150 (hiện tại: {totalScore}).</p>
             {sections.map((section, i) => (
               <div key={i} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                <input
-                  value={section.name}
-                  onChange={(e) => updateSection(i, { name: e.target.value })}
-                  placeholder="Tên phần thi"
-                  className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-                />
+                <div className="mb-2 flex items-center gap-2">
+                  <input
+                    value={section.name}
+                    onChange={(e) => updateSection(i, { name: e.target.value })}
+                    placeholder="Tên phần thi"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeSection(i)}
+                    disabled={sections.length <= 1}
+                    title="Xoá phần thi này"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-400 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:border-slate-700 dark:hover:border-red-900 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
                 <select
                   required
                   value={section.subjectId}
@@ -247,6 +266,9 @@ function DgnlTemplateManagerModal({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
             ))}
+            <Button type="button" variant="secondary" onClick={addSection}>
+              + Thêm phần thi
+            </Button>
             {formError && <ErrorState message={formError} />}
             <div className="flex gap-2">
               <Button type="submit" disabled={createMutation.isPending}>
@@ -329,6 +351,14 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
 
   function updateSection(index: number, patch: Partial<GenerateExamSectionPayload>) {
     setSections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  function addSection() {
+    setSections((prev) => [...prev, { name: '', subjectId: '', questionCount: 10, maxScore: 10 }]);
+  }
+
+  function removeSection(index: number) {
+    setSections((prev) => prev.filter((_, i) => i !== index));
   }
 
   function handleSubmit(e: FormEvent) {
@@ -470,15 +500,26 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
             </>
           ) : (
             <>
-              <p className="text-xs text-slate-500">3 phần thi, tổng thang điểm 150.</p>
+              <p className="text-xs text-slate-500">Khai báo tự do số phần thi, tổng thang điểm nên bằng 150.</p>
               {sections.map((section, i) => (
                 <div key={i} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                  <input
-                    value={section.name}
-                    onChange={(e) => updateSection(i, { name: e.target.value })}
-                    placeholder="Tên phần thi"
-                    className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
-                  />
+                  <div className="mb-2 flex items-center gap-2">
+                    <input
+                      value={section.name}
+                      onChange={(e) => updateSection(i, { name: e.target.value })}
+                      placeholder="Tên phần thi"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSection(i)}
+                      disabled={sections.length <= 1}
+                      title="Xoá phần thi này"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-400 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:border-slate-700 dark:hover:border-red-900 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                   <select
                     required
                     value={section.subjectId}
@@ -516,6 +557,9 @@ function GenerateExamForm({ onDone }: { onDone: () => void }) {
                   </div>
                 </div>
               ))}
+              <Button type="button" variant="secondary" onClick={addSection}>
+                + Thêm phần thi
+              </Button>
             </>
           )}
         </div>

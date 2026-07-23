@@ -31,6 +31,16 @@ const DIFFICULTY_LABEL: Record<DifficultyLevel, string> = {
   HIGH_APPLICATION: 'Vận dụng cao',
 };
 
+// Đúng thuật ngữ "Phần I/II/III" trong cấu trúc đề thi THPT 2025+ của Bộ
+// GD&ĐT — Phần I: TN 4 lựa chọn, Phần II: TN đúng/sai, Phần III: TN trả lời
+// ngắn (không áp dụng cho mọi môn). Ngữ văn dùng tự luận, không thuộc 3 phần.
+const PART_LABEL: Record<QuestionType, string | null> = {
+  MULTIPLE_CHOICE: 'Phần I',
+  TRUE_FALSE: 'Phần II',
+  SHORT_ANSWER: 'Phần III',
+  ESSAY: null,
+};
+
 function ExamStructurePanel({ subjectId }: { subjectId: string }) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -96,7 +106,9 @@ function ExamStructurePanel({ subjectId }: { subjectId: string }) {
   return (
     <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-800">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Cấu trúc đề cố định (THPT)</h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          Cấu trúc đề cố định (THPT) — Phần I/II/III
+        </h3>
         {!editing && (
           <button
             onClick={startEditing}
@@ -116,6 +128,11 @@ function ExamStructurePanel({ subjectId }: { subjectId: string }) {
             {structureQuery.data.items.map((item) => (
               <li key={item.id} className="flex items-center gap-1.5">
                 <LayersIcon className="h-3 w-3 shrink-0 text-indigo-500" />
+                {PART_LABEL[item.type] && (
+                  <span className="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
+                    {PART_LABEL[item.type]}
+                  </span>
+                )}
                 {TYPE_LABEL[item.type]} · {DIFFICULTY_LABEL[item.difficulty]}: {item.questionCount} câu ×{' '}
                 {item.maxScorePerQuestion}đ
               </li>

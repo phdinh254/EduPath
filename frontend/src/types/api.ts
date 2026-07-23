@@ -165,6 +165,7 @@ export interface ExamAttempt {
 
 export interface AttemptReviewItem {
   questionId: string;
+  sectionId: string | null;
   answerId: string | null;
   content: string;
   type: QuestionType;

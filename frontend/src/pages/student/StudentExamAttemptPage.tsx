@@ -103,6 +103,36 @@ function QuestionInput({
   );
 }
 
+function QuestionNavButton({
+  index,
+  isCurrent,
+  isAnswered,
+  isStarred,
+  onClick,
+}: {
+  index: number;
+  isCurrent: boolean;
+  isAnswered: boolean;
+  isStarred: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex h-9 w-9 items-center justify-center rounded-xl text-sm font-medium transition ${
+        isCurrent
+          ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-sm'
+          : isAnswered
+            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+      }`}
+    >
+      {index + 1}
+      {isStarred && <StarIcon className="absolute -right-1 -top-1 h-3 w-3 fill-amber-500 text-amber-500" />}
+    </button>
+  );
+}
+
 function formatTime(totalSeconds: number): string {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
@@ -240,6 +270,9 @@ export function StudentExamAttemptPage() {
   const current = questions[currentIndex];
   const answeredCount = Object.keys(answers).length;
   const isLast = currentIndex === total - 1;
+  const sections = examQuery.data?.sections ?? [];
+  const sectionNameById = new Map(sections.map((s) => [s.id, s.name]));
+  const currentSectionName = current?.sectionId ? sectionNameById.get(current.sectionId) : undefined;
 
   return (
     <div>
@@ -302,6 +335,11 @@ export function StudentExamAttemptPage() {
 
       {current && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          {currentSectionName && (
+            <p className="mb-2 inline-flex items-center rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
+              {currentSectionName}
+            </p>
+          )}
           <p className="mb-3 font-medium text-slate-900 dark:text-slate-100">
             <span className="mr-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-indigo-100 px-1.5 text-xs font-semibold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
               {currentIndex + 1}
@@ -330,34 +368,49 @@ export function StudentExamAttemptPage() {
         )}
       </div>
 
-      {/* Lưới điều hướng câu hỏi */}
+      {/* Lưới điều hướng câu hỏi — gộp theo phần thi nếu đề có nhiều phần (ĐGNL) */}
       <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Danh sách câu hỏi</p>
-        <div className="flex flex-wrap gap-2">
-          {questions.map((eq, index) => {
-            const isAnswered = answers[eq.questionId] != null;
-            const isCurrent = index === currentIndex;
-            const isStarred = starred.has(eq.questionId);
-            return (
-              <button
+        {sections.length > 1 ? (
+          <div className="space-y-4">
+            {sections.map((section) => {
+              const items = questions
+                .map((eq, index) => ({ eq, index }))
+                .filter(({ eq }) => eq.sectionId === section.id);
+              if (items.length === 0) return null;
+              return (
+                <div key={section.id}>
+                  <p className="mb-2 text-xs font-semibold text-violet-700 dark:text-violet-300">{section.name}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {items.map(({ eq, index }) => (
+                      <QuestionNavButton
+                        key={eq.id}
+                        index={index}
+                        isCurrent={index === currentIndex}
+                        isAnswered={answers[eq.questionId] != null}
+                        isStarred={starred.has(eq.questionId)}
+                        onClick={() => setCurrentIndex(index)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {questions.map((eq, index) => (
+              <QuestionNavButton
                 key={eq.id}
+                index={index}
+                isCurrent={index === currentIndex}
+                isAnswered={answers[eq.questionId] != null}
+                isStarred={starred.has(eq.questionId)}
                 onClick={() => setCurrentIndex(index)}
-                className={`relative flex h-9 w-9 items-center justify-center rounded-xl text-sm font-medium transition ${
-                  isCurrent
-                    ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-sm'
-                    : isAnswered
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                }`}
-              >
-                {index + 1}
-                {isStarred && (
-                  <StarIcon className="absolute -right-1 -top-1 h-3 w-3 fill-amber-500 text-amber-500" />
-                )}
-              </button>
-            );
-          })}
-        </div>
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {showCalculator && (

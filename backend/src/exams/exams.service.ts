@@ -309,7 +309,11 @@ export class ExamsService {
   }
 
   async findOne(id: string) {
-    return this.findExamOrThrow(id);
+    await this.findExamOrThrow(id);
+    return this.prisma.exam.findUniqueOrThrow({
+      where: { id },
+      include: { sections: { orderBy: { order: 'asc' } } },
+    });
   }
 
   async addQuestion(examId: string, user: JwtPayload, dto: AddExamQuestionDto) {
@@ -495,9 +499,13 @@ export class ExamsService {
   }
 
   async getAttempt(id: string, user: JwtPayload) {
+    const include = {
+      answers: true,
+      exam: { include: { sections: { orderBy: { order: 'asc' as const } } } },
+    };
     const attempt = await this.prisma.examAttempt.findUnique({
       where: { id },
-      include: { answers: true, exam: true },
+      include,
     });
     if (!attempt) {
       throw new NotFoundException('Không tìm thấy lượt làm bài');
@@ -512,7 +520,7 @@ export class ExamsService {
     if (!expired) return attempt;
     return this.prisma.examAttempt.findUniqueOrThrow({
       where: { id },
-      include: { answers: true, exam: true },
+      include,
     });
   }
 
@@ -587,6 +595,7 @@ export class ExamsService {
       const answer = answersByQuestionId.get(eq.questionId);
       return {
         questionId: eq.questionId,
+        sectionId: eq.sectionId,
         answerId: answer?.id ?? null,
         content: eq.question.content,
         type: eq.question.type,

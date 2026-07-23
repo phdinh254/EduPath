@@ -7,6 +7,7 @@ import { getApiErrorMessage } from '../../lib/api-client';
 import { ErrorState, LoadingState } from '../../components/StateViews';
 import { Card } from '../../components/ui/Card';
 import { CheckCircleIcon, SparklesIcon, XCircleIcon } from '../../components/ui/Icons';
+import type { AttemptReviewItem } from '../../types/api';
 
 function formatResponse(response: unknown, options: unknown): string {
   if (response == null) return 'Chưa trả lời';
@@ -95,6 +96,7 @@ export function StudentResultPage() {
   const attempt = attemptQuery.data!;
   const review = reviewQuery.data ?? [];
   const correctCount = review.filter((r) => r.isCorrect === true).length;
+  const sections = attempt.exam?.sections ?? [];
 
   return (
     <div>
@@ -113,45 +115,74 @@ export function StudentResultPage() {
         </div>
       </div>
 
-      <div className="space-y-4">
-        {review.map((item, index) => (
-          <Card key={item.questionId} className="p-5">
-            <p className="mb-2 font-medium text-slate-900 dark:text-slate-100">
-              Câu {index + 1}: {item.content}
-            </p>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Bạn trả lời: {formatResponse(item.response, item.options)}
-            </p>
-
-            {item.type !== 'ESSAY' ? (
-              <>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Đáp án đúng: {formatCorrectAnswer(item.correctAnswer, item.options)}
-                </p>
-                {item.explanation && (
-                  <p className="mt-1 text-sm italic text-slate-500">Giải thích: {item.explanation}</p>
-                )}
-                <p
-                  className={`mt-2 inline-flex items-center gap-1.5 text-sm font-medium ${item.isCorrect ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
-                >
-                  {item.isCorrect ? <CheckCircleIcon className="h-4 w-4" /> : <XCircleIcon className="h-4 w-4" />}
-                  {item.isCorrect ? 'Đúng' : 'Sai'} · {item.scoreAwarded ?? 0}/{item.maxScore} điểm
-                </p>
-                {item.isCorrect === false && item.answerId && (
-                  <WrongAnswerExplain answerId={item.answerId} cached={item.aiExplanation} />
-                )}
-              </>
-            ) : (
-              <div className="mt-2 rounded-xl bg-amber-50 p-3 text-sm dark:bg-amber-500/10">
-                {item.aiComment && <p className="mb-1 text-slate-600 dark:text-slate-400">{item.aiComment}</p>}
-                <p className="font-medium text-amber-700 dark:text-amber-400">
-                  {item.scoreAwarded ?? item.aiPreliminaryScore}/{item.maxScore} điểm — điểm tham khảo do AI đánh giá
-                </p>
+      {sections.length > 1 ? (
+        <div className="space-y-8">
+          {sections.map((section) => {
+            const items = review
+              .map((item, index) => ({ item, index }))
+              .filter(({ item }) => item.sectionId === section.id);
+            if (items.length === 0) return null;
+            return (
+              <div key={section.id}>
+                <h2 className="mb-3 text-sm font-semibold text-violet-700 dark:text-violet-300">
+                  {section.name} ({items.length} câu)
+                </h2>
+                <div className="space-y-4">
+                  {items.map(({ item, index }) => (
+                    <ReviewItemCard key={item.questionId} item={item} index={index} />
+                  ))}
+                </div>
               </div>
-            )}
-          </Card>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {review.map((item, index) => (
+            <ReviewItemCard key={item.questionId} item={item} index={index} />
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function ReviewItemCard({ item, index }: { item: AttemptReviewItem; index: number }) {
+  return (
+    <Card className="p-5">
+      <p className="mb-2 font-medium text-slate-900 dark:text-slate-100">
+        Câu {index + 1}: {item.content}
+      </p>
+      <p className="text-sm text-slate-600 dark:text-slate-400">
+        Bạn trả lời: {formatResponse(item.response, item.options)}
+      </p>
+
+      {item.type !== 'ESSAY' ? (
+        <>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Đáp án đúng: {formatCorrectAnswer(item.correctAnswer, item.options)}
+          </p>
+          {item.explanation && (
+            <p className="mt-1 text-sm italic text-slate-500">Giải thích: {item.explanation}</p>
+          )}
+          <p
+            className={`mt-2 inline-flex items-center gap-1.5 text-sm font-medium ${item.isCorrect ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+          >
+            {item.isCorrect ? <CheckCircleIcon className="h-4 w-4" /> : <XCircleIcon className="h-4 w-4" />}
+            {item.isCorrect ? 'Đúng' : 'Sai'} · {item.scoreAwarded ?? 0}/{item.maxScore} điểm
+          </p>
+          {item.isCorrect === false && item.answerId && (
+            <WrongAnswerExplain answerId={item.answerId} cached={item.aiExplanation} />
+          )}
+        </>
+      ) : (
+        <div className="mt-2 rounded-xl bg-amber-50 p-3 text-sm dark:bg-amber-500/10">
+          {item.aiComment && <p className="mb-1 text-slate-600 dark:text-slate-400">{item.aiComment}</p>}
+          <p className="font-medium text-amber-700 dark:text-amber-400">
+            {item.scoreAwarded ?? item.aiPreliminaryScore}/{item.maxScore} điểm — điểm tham khảo do AI đánh giá
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
