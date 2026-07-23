@@ -219,8 +219,10 @@ export function StudentExamsPage() {
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_1fr]">
-      {/* Tầng 1: chọn nhóm thi + bộ lọc — cố định khi cuộn, tự cuộn riêng nếu cao hơn màn hình */}
-      <aside className="space-y-6 self-start lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+      {/* Tầng 1: chọn nhóm thi (cuộn cùng trang) + bộ lọc (cố định khi cuộn).
+          Không dùng self-start ở đây — aside cần cao bằng cột phải để bộ lọc
+          sticky bên trong còn "chỗ" mà bám theo suốt khi cuộn. */}
+      <aside className="space-y-6">
         <div className="space-y-2">
           {CATEGORY_TABS.map((tab) => (
             <button
@@ -238,7 +240,7 @@ export function StudentExamsPage() {
           ))}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+        <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Bộ lọc</p>
             {hasActiveFilters && (
