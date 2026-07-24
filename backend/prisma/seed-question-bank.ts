@@ -8,6 +8,7 @@
 import {
   ContentStatus,
   DifficultyLevel,
+  ExamCategory,
   Prisma,
   PrismaClient,
   QuestionType,
@@ -2817,6 +2818,135 @@ async function upsertSubjectBank(params: {
   return subject;
 }
 
+// Sinh sẵn 1 đề thi thật (Exam + ExamQuestion/ExamSection) cho mỗi môn/mẫu,
+// để trang "Đề thi" của học sinh không rỗng ngay sau khi seed — thay vì chỉ
+// dừng ở việc chuẩn bị kho câu hỏi + cấu trúc/mẫu đề rồi chờ ADMIN tự bấm
+// "Ghép đề" thủ công từng môn. Logic chọn câu hỏi mô phỏng đúng
+// ExamsService.generateThptExam/generateDgnlExam (lấy câu đã APPROVED theo
+// đúng thứ tự, không trùng câu trong cùng 1 đề) nhưng không cần AI sinh bù vì
+// kho câu hỏi đã seed đủ số lượng theo cấu trúc/mẫu.
+const GENERATED_EXAM_TITLES = [
+  'Đề thi thử THPT 2026 - Môn Toán',
+  'Đề thi thử THPT 2026 - Môn Ngữ văn',
+  'Đề thi thử THPT 2026 - Môn Tiếng Anh',
+  'Đề thi thử THPT 2026 - Môn Vật lý',
+  'Đề thi thử THPT 2026 - Môn Hóa học',
+  'Đề thi thử THPT 2026 - Môn Sinh học',
+  'Đề thi thử THPT 2026 - Môn Lịch sử',
+  'Đề thi thử THPT 2026 - Môn Địa lý',
+  'Đề thi thử ĐGNL V-ACT 2026 (ĐHQG TP.HCM)',
+];
+
+async function upsertExam(params: {
+  title: string;
+  category: ExamCategory;
+  subjectId?: string;
+  durationMinutes: number;
+  adminId: string;
+  items?: {
+    type: QuestionType;
+    difficulty: DifficultyLevel;
+    questionCount: number;
+    maxScorePerQuestion: number;
+  }[];
+  sections?: {
+    name: string;
+    subjectId: string;
+    questionCount: number;
+    maxScore: number;
+  }[];
+}) {
+  // Idempotent: xoá đề cùng tiêu đề do chính seed này tạo trước khi tạo lại
+  // (ExamQuestion/ExamSection tự xoá theo onDelete: Cascade).
+  await prisma.exam.deleteMany({
+    where: { title: params.title, createdById: params.adminId },
+  });
+  const exam = await prisma.exam.create({
+    data: {
+      title: params.title,
+      category: params.category,
+      subjectId: params.subjectId,
+      durationMinutes: params.durationMinutes,
+      createdById: params.adminId,
+    },
+  });
+
+  let order = 1;
+  const usedQuestionIds: string[] = [];
+
+  for (const item of params.items ?? []) {
+    const questions = await prisma.question.findMany({
+      where: {
+        subjectId: params.subjectId!,
+        type: item.type,
+        difficulty: item.difficulty,
+        status: ContentStatus.APPROVED,
+        id: { notIn: usedQuestionIds },
+      },
+      take: item.questionCount,
+    });
+    if (questions.length < item.questionCount) {
+      throw new Error(
+        `Không đủ câu hỏi cho đề "${params.title}" (${item.type}/${item.difficulty}): cần ${item.questionCount}, có ${questions.length}`,
+      );
+    }
+    for (const q of questions) {
+      usedQuestionIds.push(q.id);
+      await prisma.examQuestion.create({
+        data: {
+          examId: exam.id,
+          questionId: q.id,
+          order: order++,
+          maxScore: item.maxScorePerQuestion,
+        },
+      });
+    }
+  }
+
+  for (const [i, section] of (params.sections ?? []).entries()) {
+    const examSection = await prisma.examSection.create({
+      data: {
+        examId: exam.id,
+        name: section.name,
+        order: i + 1,
+        maxScore: section.maxScore,
+      },
+    });
+    const perQuestionScore = section.maxScore / section.questionCount;
+    const questions = await prisma.question.findMany({
+      where: {
+        subjectId: section.subjectId,
+        type: MULTIPLE_CHOICE,
+        status: ContentStatus.APPROVED,
+        id: { notIn: usedQuestionIds },
+      },
+      take: section.questionCount,
+    });
+    if (questions.length < section.questionCount) {
+      throw new Error(
+        `Không đủ câu hỏi cho phần "${section.name}" của đề "${params.title}": cần ${section.questionCount}, có ${questions.length}`,
+      );
+    }
+    for (const q of questions) {
+      usedQuestionIds.push(q.id);
+      await prisma.examQuestion.create({
+        data: {
+          examId: exam.id,
+          questionId: q.id,
+          sectionId: examSection.id,
+          order: order++,
+          maxScore: perQuestionScore,
+        },
+      });
+    }
+  }
+
+  console.log(
+    `✓ Đề "${params.title}" (${params.category}): ${usedQuestionIds.length} câu hỏi`,
+  );
+  return exam;
+}
+
 async function main() {
   const admin = await prisma.user.findFirst({
     where: { role: 'ADMIN', email: 'admin@edupath.dev' },
@@ -2827,6 +2957,48 @@ async function main() {
     );
   }
 
+  // Xoá trước mọi đề (Exam) do chính seed này tạo ở lần chạy trước — bắt buộc
+  // phải làm ở bước ĐẦU TIÊN của main(), trước khi upsertSubjectBank() xoá lại
+  // kho câu hỏi cũ: ExamQuestion không cascade xoá theo Question, nên nếu còn
+  // đề cũ trỏ tới câu hỏi cũ, deleteMany() câu hỏi trong upsertSubjectBank sẽ
+  // vi phạm khoá ngoại. Xoá Exam trước sẽ cascade xoá ExamQuestion/ExamSection
+  // liên quan, giải phóng câu hỏi cũ để xoá/ghi đè an toàn.
+  await prisma.exam.deleteMany({
+    where: { title: { in: GENERATED_EXAM_TITLES }, createdById: admin.id },
+  });
+
+  const toanStructureItems = [
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: KNOWLEDGE,
+      questionCount: 6,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: COMPREHENSION,
+      questionCount: 6,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: TRUE_FALSE,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 1,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 0.5,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: HIGH_APPLICATION,
+      questionCount: 2,
+      maxScorePerQuestion: 0.5,
+    },
+  ];
   const toan = await upsertSubjectBank({
     code: 'TOAN2025',
     name: 'Toán',
@@ -2834,40 +3006,25 @@ async function main() {
     topics: TOAN_TOPICS,
     questions: TOAN_Q,
     adminId: admin.id,
-    structureItems: [
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: KNOWLEDGE,
-        questionCount: 6,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: COMPREHENSION,
-        questionCount: 6,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: TRUE_FALSE,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 1,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 0.5,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: HIGH_APPLICATION,
-        questionCount: 2,
-        maxScorePerQuestion: 0.5,
-      },
-    ],
+    structureItems: toanStructureItems,
+  });
+  await upsertExam({
+    title: 'Đề thi thử THPT 2026 - Môn Toán',
+    category: ExamCategory.THPT,
+    subjectId: toan.id,
+    durationMinutes: 90,
+    adminId: admin.id,
+    items: toanStructureItems,
   });
 
+  const vanStructureItems = [
+    {
+      type: ESSAY,
+      difficulty: KNOWLEDGE,
+      questionCount: 1,
+      maxScorePerQuestion: 10,
+    },
+  ];
   const van = await upsertSubjectBank({
     code: 'VAN2025',
     name: 'Ngữ văn',
@@ -2875,16 +3032,43 @@ async function main() {
     topics: VAN_TOPICS,
     questions: VAN_Q,
     adminId: admin.id,
-    structureItems: [
-      {
-        type: ESSAY,
-        difficulty: KNOWLEDGE,
-        questionCount: 1,
-        maxScorePerQuestion: 10,
-      },
-    ],
+    structureItems: vanStructureItems,
+  });
+  await upsertExam({
+    title: 'Đề thi thử THPT 2026 - Môn Ngữ văn',
+    category: ExamCategory.THPT,
+    subjectId: van.id,
+    durationMinutes: 120,
+    adminId: admin.id,
+    items: vanStructureItems,
   });
 
+  const anhStructureItems = [
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: KNOWLEDGE,
+      questionCount: 10,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: COMPREHENSION,
+      questionCount: 10,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: APPLICATION,
+      questionCount: 10,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: HIGH_APPLICATION,
+      questionCount: 10,
+      maxScorePerQuestion: 0.25,
+    },
+  ];
   const anh = await upsertSubjectBank({
     code: 'ANH2025',
     name: 'Tiếng Anh',
@@ -2892,225 +3076,253 @@ async function main() {
     topics: ANH_TOPICS,
     questions: ANH_Q,
     adminId: admin.id,
-    structureItems: [
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: KNOWLEDGE,
-        questionCount: 10,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: COMPREHENSION,
-        questionCount: 10,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: APPLICATION,
-        questionCount: 10,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: HIGH_APPLICATION,
-        questionCount: 10,
-        maxScorePerQuestion: 0.25,
-      },
-    ],
+    structureItems: anhStructureItems,
+  });
+  await upsertExam({
+    title: 'Đề thi thử THPT 2026 - Môn Tiếng Anh',
+    category: ExamCategory.THPT,
+    subjectId: anh.id,
+    durationMinutes: 60,
+    adminId: admin.id,
+    items: anhStructureItems,
   });
 
-  await upsertSubjectBank({
+  const lyStructureItems = [
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: KNOWLEDGE,
+      questionCount: 9,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: COMPREHENSION,
+      questionCount: 9,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: TRUE_FALSE,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 1,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: HIGH_APPLICATION,
+      questionCount: 2,
+      maxScorePerQuestion: 0.25,
+    },
+  ];
+  const ly = await upsertSubjectBank({
     code: 'LY2025',
     name: 'Vật lý',
     durationMinutes: 50,
     topics: LY_TOPICS,
     questions: LY_Q,
     adminId: admin.id,
-    structureItems: [
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: KNOWLEDGE,
-        questionCount: 9,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: COMPREHENSION,
-        questionCount: 9,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: TRUE_FALSE,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 1,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: HIGH_APPLICATION,
-        questionCount: 2,
-        maxScorePerQuestion: 0.25,
-      },
-    ],
+    structureItems: lyStructureItems,
+  });
+  await upsertExam({
+    title: 'Đề thi thử THPT 2026 - Môn Vật lý',
+    category: ExamCategory.THPT,
+    subjectId: ly.id,
+    durationMinutes: 50,
+    adminId: admin.id,
+    items: lyStructureItems,
   });
 
-  await upsertSubjectBank({
+  const hoaStructureItems = [
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: KNOWLEDGE,
+      questionCount: 9,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: COMPREHENSION,
+      questionCount: 9,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: TRUE_FALSE,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 1,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: HIGH_APPLICATION,
+      questionCount: 2,
+      maxScorePerQuestion: 0.25,
+    },
+  ];
+  const hoa = await upsertSubjectBank({
     code: 'HOA2025',
     name: 'Hóa học',
     durationMinutes: 50,
     topics: HOA_TOPICS,
     questions: HOA_Q,
     adminId: admin.id,
-    structureItems: [
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: KNOWLEDGE,
-        questionCount: 9,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: COMPREHENSION,
-        questionCount: 9,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: TRUE_FALSE,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 1,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: HIGH_APPLICATION,
-        questionCount: 2,
-        maxScorePerQuestion: 0.25,
-      },
-    ],
+    structureItems: hoaStructureItems,
+  });
+  await upsertExam({
+    title: 'Đề thi thử THPT 2026 - Môn Hóa học',
+    category: ExamCategory.THPT,
+    subjectId: hoa.id,
+    durationMinutes: 50,
+    adminId: admin.id,
+    items: hoaStructureItems,
   });
 
-  await upsertSubjectBank({
+  const sinhStructureItems = [
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: KNOWLEDGE,
+      questionCount: 9,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: COMPREHENSION,
+      questionCount: 9,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: TRUE_FALSE,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 1,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: HIGH_APPLICATION,
+      questionCount: 2,
+      maxScorePerQuestion: 0.25,
+    },
+  ];
+  const sinh = await upsertSubjectBank({
     code: 'SINH2025',
     name: 'Sinh học',
     durationMinutes: 50,
     topics: SINH_TOPICS,
     questions: SINH_Q,
     adminId: admin.id,
-    structureItems: [
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: KNOWLEDGE,
-        questionCount: 9,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: COMPREHENSION,
-        questionCount: 9,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: TRUE_FALSE,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 1,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: HIGH_APPLICATION,
-        questionCount: 2,
-        maxScorePerQuestion: 0.25,
-      },
-    ],
+    structureItems: sinhStructureItems,
+  });
+  await upsertExam({
+    title: 'Đề thi thử THPT 2026 - Môn Sinh học',
+    category: ExamCategory.THPT,
+    subjectId: sinh.id,
+    durationMinutes: 50,
+    adminId: admin.id,
+    items: sinhStructureItems,
   });
 
-  await upsertSubjectBank({
+  const suStructureItems = [
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: KNOWLEDGE,
+      questionCount: 12,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: COMPREHENSION,
+      questionCount: 12,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: TRUE_FALSE,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 1,
+    },
+  ];
+  const su = await upsertSubjectBank({
     code: 'SU2025',
     name: 'Lịch sử',
     durationMinutes: 50,
     topics: SU_TOPICS,
     questions: SU_Q,
     adminId: admin.id,
-    structureItems: [
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: KNOWLEDGE,
-        questionCount: 12,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: COMPREHENSION,
-        questionCount: 12,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: TRUE_FALSE,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 1,
-      },
-    ],
+    structureItems: suStructureItems,
+  });
+  await upsertExam({
+    title: 'Đề thi thử THPT 2026 - Môn Lịch sử',
+    category: ExamCategory.THPT,
+    subjectId: su.id,
+    durationMinutes: 50,
+    adminId: admin.id,
+    items: suStructureItems,
   });
 
-  await upsertSubjectBank({
+  const diaStructureItems = [
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: KNOWLEDGE,
+      questionCount: 9,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: MULTIPLE_CHOICE,
+      difficulty: COMPREHENSION,
+      questionCount: 9,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: TRUE_FALSE,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 1,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: APPLICATION,
+      questionCount: 4,
+      maxScorePerQuestion: 0.25,
+    },
+    {
+      type: SHORT_ANSWER,
+      difficulty: HIGH_APPLICATION,
+      questionCount: 2,
+      maxScorePerQuestion: 0.25,
+    },
+  ];
+  const dia = await upsertSubjectBank({
     code: 'DIA2025',
     name: 'Địa lý',
     durationMinutes: 50,
     topics: DIA_TOPICS,
     questions: DIA_Q,
     adminId: admin.id,
-    structureItems: [
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: KNOWLEDGE,
-        questionCount: 9,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: MULTIPLE_CHOICE,
-        difficulty: COMPREHENSION,
-        questionCount: 9,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: TRUE_FALSE,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 1,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: APPLICATION,
-        questionCount: 4,
-        maxScorePerQuestion: 0.25,
-      },
-      {
-        type: SHORT_ANSWER,
-        difficulty: HIGH_APPLICATION,
-        questionCount: 2,
-        maxScorePerQuestion: 0.25,
-      },
-    ],
+    structureItems: diaStructureItems,
+  });
+  await upsertExam({
+    title: 'Đề thi thử THPT 2026 - Môn Địa lý',
+    category: ExamCategory.THPT,
+    subjectId: dia.id,
+    durationMinutes: 50,
+    adminId: admin.id,
+    items: diaStructureItems,
   });
 
   // Môn riêng cho phần "Tư duy khoa học" của ĐGNL — không gắn với môn THPT
@@ -3202,6 +3414,14 @@ async function main() {
   console.log(
     `✓ Mẫu ĐGNL "${templateName}": ${sections.length} phần, ${totalQuestions} câu, tổng ${totalScore} điểm`,
   );
+
+  await upsertExam({
+    title: 'Đề thi thử ĐGNL V-ACT 2026 (ĐHQG TP.HCM)',
+    category: ExamCategory.DGNL,
+    durationMinutes: 150,
+    adminId: admin.id,
+    sections,
+  });
 }
 
 main()
