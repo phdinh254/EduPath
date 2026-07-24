@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: true,
+    port: process.env.PORT ? Number(process.env.PORT) : 5173,
     proxy: {
       '/api': {
         // Chạy trực tiếp trên máy: backend ở localhost. Chạy qua Docker Compose:
