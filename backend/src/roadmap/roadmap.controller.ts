@@ -6,7 +6,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
+import { Role, RoadmapStatus } from '@prisma/client';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -54,15 +54,27 @@ export class RoadmapController {
     required: false,
     description: 'Lọc theo môn học',
   })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: RoadmapStatus,
+    description:
+      'Mặc định ACTIVE — truyền COMPLETED để xem lộ trình đã hoàn thành',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách lộ trình đang hoạt động.',
+    description: 'Danh sách lộ trình theo trạng thái.',
   })
   findMyRoadmap(
     @CurrentUser() user: JwtPayload,
     @Query('subjectId') subjectId?: string,
+    @Query('status') status?: RoadmapStatus,
   ) {
-    return this.roadmapService.findRoadmapForStudent(user.sub, subjectId);
+    return this.roadmapService.findRoadmapForStudent(
+      user.sub,
+      subjectId,
+      status,
+    );
   }
 
   @Roles(Role.STUDENT)

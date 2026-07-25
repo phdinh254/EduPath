@@ -8,9 +8,12 @@ export async function fetchMyWeaknesses(subjectId?: string): Promise<WeaknessAna
   return data;
 }
 
-export async function fetchMyRoadmap(subjectId?: string): Promise<StudyRoadmap[]> {
+export async function fetchMyRoadmap(
+  subjectId?: string,
+  status?: StudyRoadmap['status'],
+): Promise<StudyRoadmap[]> {
   const { data } = await apiClient.get<StudyRoadmap[]>('/roadmap/me/study-roadmap', {
-    params: subjectId ? { subjectId } : undefined,
+    params: { subjectId, status },
   });
   return data;
 }

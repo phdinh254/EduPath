@@ -382,9 +382,13 @@ export class RoadmapService {
     });
   }
 
-  findRoadmapForStudent(studentId: string, subjectId?: string) {
+  findRoadmapForStudent(
+    studentId: string,
+    subjectId?: string,
+    status: RoadmapStatus = RoadmapStatus.ACTIVE,
+  ) {
     return this.prisma.studyRoadmap.findMany({
-      where: { studentId, subjectId, status: RoadmapStatus.ACTIVE },
+      where: { studentId, subjectId, status },
       orderBy: { updatedAt: 'desc' },
     });
   }

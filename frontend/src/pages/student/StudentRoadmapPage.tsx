@@ -121,9 +121,14 @@ function RoadmapCard({
   const completeMutation = useMutation({
     mutationFn: ({ topicId, stage }: { topicId: string; stage: StudyRoadmapStage['stage'] }) =>
       completeRoadmapStage(roadmap.id, topicId, stage),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ['roadmap'] });
-      showToast('Đã cập nhật lộ trình', 'success');
+      showToast(
+        updated.status === 'COMPLETED'
+          ? `🎉 Đã hoàn thành lộ trình ${subjectName}!`
+          : 'Đã cập nhật lộ trình',
+        'success',
+      );
     },
     onError: (err) => showToast(getApiErrorMessage(err), 'error'),
   });
@@ -147,11 +152,23 @@ function RoadmapCard({
       <div className="space-y-5">
         {[...stagesByTopic.entries()].map(([topicId, stages]) => {
           const currentStage = stages.find((s) => s.status !== 'COMPLETED');
+          const doneCount = stages.filter((s) => s.status === 'COMPLETED').length;
           return (
             <div key={topicId}>
-              <p className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                {topicNameById.get(topicId) ?? 'Chuyên đề'}
-              </p>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {topicNameById.get(topicId) ?? 'Chuyên đề'}
+                </p>
+                <span className="text-xs text-slate-400">
+                  {doneCount}/{stages.length}
+                </span>
+              </div>
+              <div className="mb-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all"
+                  style={{ width: `${(doneCount / stages.length) * 100}%` }}
+                />
+              </div>
               <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {stages.map((stage) => {
                   const isDone = stage.status === 'COMPLETED';
@@ -186,7 +203,7 @@ function RoadmapCard({
                     onClick={() => practiceMutation.mutate(topicId)}
                     disabled={practiceMutation.isPending}
                   >
-                    Luyện ngay
+                    {practiceMutation.isPending ? 'Đang tạo đề...' : 'Luyện ngay'}
                   </Button>
                   <Button
                     variant="secondary"
@@ -194,7 +211,7 @@ function RoadmapCard({
                     onClick={() => completeMutation.mutate({ topicId, stage: currentStage.stage })}
                     disabled={completeMutation.isPending}
                   >
-                    Đánh dấu hoàn thành
+                    {completeMutation.isPending ? 'Đang lưu...' : 'Đánh dấu hoàn thành'}
                   </Button>
                 </div>
               ) : (
@@ -215,9 +232,17 @@ export function StudentRoadmapPage() {
   const subjectsQuery = useQuery({ queryKey: ['subjects'], queryFn: fetchSubjects });
   const weaknessesQuery = useQuery({ queryKey: ['weaknesses'], queryFn: () => fetchMyWeaknesses() });
   const roadmapQuery = useQuery({ queryKey: ['roadmap'], queryFn: () => fetchMyRoadmap() });
+  const completedRoadmapQuery = useQuery({
+    queryKey: ['roadmap', 'completed'],
+    queryFn: () => fetchMyRoadmap(undefined, 'COMPLETED'),
+  });
 
   const subjectNameById = new Map(subjectsQuery.data?.map((s) => [s.id, s.name]));
-  const roadmapSubjectIds = [...new Set((roadmapQuery.data ?? []).map((r) => r.subjectId))];
+  const roadmapSubjectIds = [
+    ...new Set(
+      [...(roadmapQuery.data ?? []), ...(completedRoadmapQuery.data ?? [])].map((r) => r.subjectId),
+    ),
+  ];
   const topicsQueries = useQueries({
     queries: roadmapSubjectIds.map((subjectId) => ({
       queryKey: ['topics', subjectId],
@@ -320,6 +345,33 @@ export function StudentRoadmapPage() {
           />
         ))}
       </div>
+
+      {completedRoadmapQuery.data && completedRoadmapQuery.data.length > 0 && (
+        <>
+          <h2 className="mb-4 mt-10 flex items-center gap-2 text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <CheckCircleIcon className="h-5 w-5 text-emerald-500" />
+            Lộ trình đã hoàn thành
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {completedRoadmapQuery.data.map((roadmap) => (
+              <Card
+                key={roadmap.id}
+                className="flex items-center gap-3 border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/50 dark:bg-emerald-500/5"
+              >
+                <span className="text-xl">🎉</span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {subjectNameById.get(roadmap.subjectId) ?? 'Môn học'}
+                  </p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                    Đã hoàn thành mọi chuyên đề trong lộ trình
+                  </p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
