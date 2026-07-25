@@ -63,6 +63,13 @@ export async function fetchExamQuestions(examId: string): Promise<ExamQuestion[]
   return data;
 }
 
+// Học sinh tự tạo đề luyện tập nhanh cho một chuyên đề yếu — dùng từ nút
+// "Luyện ngay" trên trang lộ trình AI.
+export async function generateTopicPractice(topicId: string, questionCount?: number): Promise<Exam> {
+  const { data } = await apiClient.post<Exam>('/exams/practice/topic', { topicId, questionCount });
+  return data;
+}
+
 export async function fetchExamAttempts(examId: string): Promise<ExamAttempt[]> {
   const { data } = await apiClient.get<ExamAttempt[]>(`/exams/${examId}/attempts`);
   return data;

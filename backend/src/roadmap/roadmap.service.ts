@@ -1,4 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, RoadmapStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
@@ -34,12 +40,20 @@ const HISTORY_WINDOW = 3;
 
 // Các giai đoạn ôn tập theo từng chuyên đề yếu — quy tắc rule-based cho MVP,
 // sẽ được thay bằng lời gọi LLM API thật khi tích hợp AI đề xuất nội dung học.
-const ROADMAP_STAGES = [
+export const ROADMAP_STAGES = [
   'REVIEW_THEORY',
   'BASIC_PRACTICE',
   'ADVANCED_PRACTICE',
   'RETEST',
 ] as const;
+
+export type RoadmapStage = (typeof ROADMAP_STAGES)[number];
+
+interface StageEntry {
+  topicId: string;
+  stage: RoadmapStage;
+  status: 'PENDING' | 'COMPLETED';
+}
 
 @Injectable()
 export class RoadmapService {
@@ -126,7 +140,110 @@ export class RoadmapService {
           );
         }
       }
+
+      // Chuyên đề từng nằm trong lộ trình nhưng lần này không còn yếu nữa —
+      // coi như học sinh đã tự "kiểm tra lại" thành công, tự đóng các giai
+      // đoạn còn lại của chuyên đề đó thay vì bắt học sinh tự tay đánh dấu.
+      await this.autoCompleteImprovedStages(
+        attempt.studentId,
+        subjectId,
+        new Set(Object.keys(subjectBreakdown)),
+        new Set(weakTopics.map((wt) => wt.topicId)),
+      );
     }
+  }
+
+  private async autoCompleteImprovedStages(
+    studentId: string,
+    subjectId: string,
+    topicIdsInAttempt: Set<string>,
+    stillWeakTopicIds: Set<string>,
+  ) {
+    const roadmap = await this.prisma.studyRoadmap.findFirst({
+      where: { studentId, subjectId, status: RoadmapStatus.ACTIVE },
+    });
+    if (!roadmap) return;
+
+    const stages = roadmap.stages as unknown as StageEntry[];
+    let changed = false;
+    for (const stage of stages) {
+      if (
+        topicIdsInAttempt.has(stage.topicId) &&
+        !stillWeakTopicIds.has(stage.topicId) &&
+        stage.status !== 'COMPLETED'
+      ) {
+        stage.status = 'COMPLETED';
+        changed = true;
+      }
+    }
+    if (!changed) return;
+
+    const allDone = stages.every((s) => s.status === 'COMPLETED');
+    await this.prisma.studyRoadmap.update({
+      where: { id: roadmap.id },
+      data: {
+        stages: stages as unknown as Prisma.InputJsonValue,
+        status: allDone ? RoadmapStatus.COMPLETED : RoadmapStatus.ACTIVE,
+      },
+    });
+  }
+
+  // Học sinh tự đánh dấu đã hoàn thành một giai đoạn ôn tập (vd. đã ôn xong lý
+  // thuyết, đã luyện xong bài cơ bản) — chỉ cho phép đánh dấu theo đúng thứ tự
+  // (không được nhảy cóc qua giai đoạn chưa hoàn thành trước đó) để lộ trình
+  // phản ánh đúng tiến độ thực tế.
+  async completeStage(
+    studentId: string,
+    roadmapId: string,
+    topicId: string,
+    stage: RoadmapStage,
+  ) {
+    const roadmap = await this.prisma.studyRoadmap.findUnique({
+      where: { id: roadmapId },
+    });
+    if (!roadmap) {
+      throw new NotFoundException('Không tìm thấy lộ trình');
+    }
+    if (roadmap.studentId !== studentId) {
+      throw new ForbiddenException('Đây không phải lộ trình của bạn');
+    }
+    if (roadmap.status !== RoadmapStatus.ACTIVE) {
+      throw new BadRequestException('Lộ trình này đã đóng');
+    }
+
+    const stages = roadmap.stages as unknown as StageEntry[];
+    const stageIndex = ROADMAP_STAGES.indexOf(stage);
+    if (stageIndex === -1) {
+      throw new BadRequestException('Giai đoạn không hợp lệ');
+    }
+    for (let i = 0; i < stageIndex; i++) {
+      const prevStage = stages.find(
+        (s) => s.topicId === topicId && s.stage === ROADMAP_STAGES[i],
+      );
+      if (prevStage && prevStage.status !== 'COMPLETED') {
+        throw new BadRequestException(
+          `Cần hoàn thành giai đoạn "${ROADMAP_STAGES[i]}" trước`,
+        );
+      }
+    }
+    const target = stages.find(
+      (s) => s.topicId === topicId && s.stage === stage,
+    );
+    if (!target) {
+      throw new NotFoundException(
+        'Không tìm thấy giai đoạn này trong lộ trình',
+      );
+    }
+    target.status = 'COMPLETED';
+
+    const allDone = stages.every((s) => s.status === 'COMPLETED');
+    return this.prisma.studyRoadmap.update({
+      where: { id: roadmapId },
+      data: {
+        stages: stages as unknown as Prisma.InputJsonValue,
+        status: allDone ? RoadmapStatus.COMPLETED : RoadmapStatus.ACTIVE,
+      },
+    });
   }
 
   // Nhìn lại tối đa HISTORY_WINDOW lượt phân tích gần nhất (không tính lượt

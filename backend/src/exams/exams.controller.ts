@@ -14,6 +14,7 @@ import { ExamsService } from './exams.service';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { AddExamQuestionDto } from './dto/add-exam-question.dto';
 import { GenerateExamDto } from './dto/generate-exam.dto';
+import { GenerateTopicPracticeDto } from './dto/generate-topic-practice.dto';
 import { SaveAnswerDto } from './dto/save-answer.dto';
 
 @ApiTags('exams')
@@ -44,6 +45,21 @@ export class ExamsController {
   @ApiResponse({ status: 201, description: 'Đã sinh đề thi hoàn chỉnh.' })
   generate(@CurrentUser() user: JwtPayload, @Body() dto: GenerateExamDto) {
     return this.examsService.generateExam(user, dto);
+  }
+
+  @Roles(Role.STUDENT)
+  @Post('practice/topic')
+  @ApiOperation({
+    summary: 'Tự tạo đề luyện tập nhanh theo chuyên đề',
+    description:
+      'Chỉ STUDENT. Dùng từ trang lộ trình AI để luyện đúng một chuyên đề yếu — câu hỏi lấy từ kho đã duyệt, AI sinh bù ngay nếu thiếu.',
+  })
+  @ApiResponse({ status: 201, description: 'Đã tạo đề luyện tập.' })
+  generateTopicPractice(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: GenerateTopicPracticeDto,
+  ) {
+    return this.examsService.generateTopicPractice(user, dto);
   }
 
   @Get()

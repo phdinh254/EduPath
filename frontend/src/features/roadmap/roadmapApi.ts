@@ -1,5 +1,5 @@
 import { apiClient } from '../../lib/api-client';
-import type { StudyRoadmap, WeaknessAnalysis } from '../../types/api';
+import type { StudyRoadmap, StudyRoadmapStage, WeaknessAnalysis } from '../../types/api';
 
 export async function fetchMyWeaknesses(subjectId?: string): Promise<WeaknessAnalysis[]> {
   const { data } = await apiClient.get<WeaknessAnalysis[]>('/roadmap/me/weaknesses', {
@@ -11,6 +11,19 @@ export async function fetchMyWeaknesses(subjectId?: string): Promise<WeaknessAna
 export async function fetchMyRoadmap(subjectId?: string): Promise<StudyRoadmap[]> {
   const { data } = await apiClient.get<StudyRoadmap[]>('/roadmap/me/study-roadmap', {
     params: subjectId ? { subjectId } : undefined,
+  });
+  return data;
+}
+
+export async function completeRoadmapStage(
+  roadmapId: string,
+  topicId: string,
+  stage: StudyRoadmapStage['stage'],
+): Promise<StudyRoadmap> {
+  const { data } = await apiClient.patch<StudyRoadmap>('/roadmap/me/stages', {
+    roadmapId,
+    topicId,
+    stage,
   });
   return data;
 }

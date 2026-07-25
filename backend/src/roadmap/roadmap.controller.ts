@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -11,6 +11,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { RoadmapService } from './roadmap.service';
+import { CompleteStageDto } from './dto/complete-stage.dto';
 
 @ApiTags('roadmap')
 @ApiBearerAuth()
@@ -62,5 +63,30 @@ export class RoadmapController {
     @Query('subjectId') subjectId?: string,
   ) {
     return this.roadmapService.findRoadmapForStudent(user.sub, subjectId);
+  }
+
+  @Roles(Role.STUDENT)
+  @Patch('me/stages')
+  @ApiOperation({
+    summary: 'Đánh dấu một giai đoạn ôn tập đã hoàn thành',
+    description:
+      'Chỉ STUDENT, chỉ trên lộ trình của chính mình. Phải hoàn thành đúng thứ tự (không nhảy cóc). Tự đóng lộ trình (COMPLETED) khi mọi giai đoạn đã xong.',
+  })
+  @ApiResponse({ status: 200, description: 'Lộ trình sau khi cập nhật.' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Giai đoạn không hợp lệ hoặc chưa hoàn thành giai đoạn trước đó.',
+  })
+  completeStage(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CompleteStageDto,
+  ) {
+    return this.roadmapService.completeStage(
+      user.sub,
+      dto.roadmapId,
+      dto.topicId,
+      dto.stage,
+    );
   }
 }

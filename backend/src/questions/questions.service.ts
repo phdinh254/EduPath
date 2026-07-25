@@ -191,6 +191,58 @@ export class QuestionsService {
     return [...existing, ...synthesizedRows];
   }
 
+  // Dùng bởi ExamsService.generateTopicPractice — luyện tập nhanh đúng một
+  // chuyên đề (lấy từ lộ trình AI), khác với pickOrSynthesizeQuestions vốn
+  // lọc theo subjectId+type+difficulty để ghép cả đề theo ExamStructure.
+  async pickQuestionsByTopic(params: {
+    topicId: string;
+    count: number;
+    creatorId: string;
+  }) {
+    const existing = await this.prisma.question.findMany({
+      where: { topicId: params.topicId, status: ContentStatus.APPROVED },
+      take: params.count,
+    });
+    if (existing.length >= params.count) {
+      return existing.slice(0, params.count);
+    }
+
+    const missing = params.count - existing.length;
+    const topic = await this.prisma.topic.findUnique({
+      where: { id: params.topicId },
+      include: { subject: true },
+    });
+    if (!topic) {
+      throw new NotFoundException('Không tìm thấy chuyên đề');
+    }
+    const synthesizedRows = await Promise.all(
+      Array.from({ length: missing }, async (_, i) => {
+        const synthesized = await this.synthesize({
+          type: QuestionType.MULTIPLE_CHOICE,
+          difficulty: 'KNOWLEDGE',
+          subjectName: topic.subject.name,
+          topicName: topic.name,
+          index: existing.length + i,
+        });
+        return this.prisma.question.create({
+          data: {
+            subjectId: topic.subjectId,
+            topicId: topic.id,
+            type: QuestionType.MULTIPLE_CHOICE,
+            difficulty: 'KNOWLEDGE',
+            content: synthesized.content,
+            options: synthesized.options as Prisma.InputJsonValue,
+            correctAnswer: synthesized.correctAnswer as Prisma.InputJsonValue,
+            explanation: synthesized.explanation,
+            createdById: params.creatorId,
+            status: ContentStatus.APPROVED,
+          },
+        });
+      }),
+    );
+    return [...existing, ...synthesizedRows];
+  }
+
   findAll(status?: ContentStatus) {
     return this.prisma.question.findMany({
       where: status ? { status } : undefined,

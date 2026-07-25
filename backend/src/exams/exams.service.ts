@@ -19,6 +19,7 @@ import { GradingService } from '../grading/grading.service';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { AddExamQuestionDto } from './dto/add-exam-question.dto';
 import { GenerateExamDto } from './dto/generate-exam.dto';
+import { GenerateTopicPracticeDto } from './dto/generate-topic-practice.dto';
 
 const EXAM_DETAIL_INCLUDE = {
   sections: { orderBy: { order: 'asc' as const } },
@@ -200,6 +201,50 @@ export class ExamsService {
           },
         });
       }
+    }
+    return this.withDetails(exam.id);
+  }
+
+  // Học sinh tự khởi tạo đề luyện tập nhanh đúng một chuyên đề — dùng bởi nút
+  // "Luyện ngay" trên trang lộ trình AI, để mỗi giai đoạn ôn tập gắn với hành
+  // động thật thay vì chỉ là nhãn. Đề này riêng của học sinh (createdById =
+  // chính họ), không cần ExamStructure vì chỉ luyện 1 chuyên đề, không phải
+  // đề thi thử đầy đủ.
+  async generateTopicPractice(user: JwtPayload, dto: GenerateTopicPracticeDto) {
+    const topic = await this.prisma.topic.findUnique({
+      where: { id: dto.topicId },
+      include: { subject: true },
+    });
+    if (!topic) {
+      throw new BadRequestException('Không tìm thấy chuyên đề');
+    }
+    const questionCount = dto.questionCount ?? 10;
+
+    const exam = await this.prisma.exam.create({
+      data: {
+        title: `Luyện tập: ${topic.name}`,
+        category: ExamCategory.THPT,
+        subjectId: topic.subjectId,
+        durationMinutes: Math.max(10, questionCount * 2),
+        createdById: user.sub,
+      },
+    });
+
+    const questions = await this.questionsService.pickQuestionsByTopic({
+      topicId: dto.topicId,
+      count: questionCount,
+      creatorId: user.sub,
+    });
+    let order = 1;
+    for (const q of questions) {
+      await this.prisma.examQuestion.create({
+        data: {
+          examId: exam.id,
+          questionId: q.id,
+          order: order++,
+          maxScore: 0.25,
+        },
+      });
     }
     return this.withDetails(exam.id);
   }
