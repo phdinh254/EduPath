@@ -21,6 +21,7 @@ const pendingQuestion: Question = {
   createdById: 'admin-1',
   status: 'PENDING_APPROVAL',
   rejectReason: null,
+  source: 'AI_GENERATED',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

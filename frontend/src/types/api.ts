@@ -85,6 +85,7 @@ export interface Question {
   createdById: string;
   status: ContentStatus;
   rejectReason: string | null;
+  source: 'IMPORTED_REAL' | 'ADMIN_MANUAL' | 'AI_GENERATED';
   createdAt: string;
   updatedAt: string;
 }

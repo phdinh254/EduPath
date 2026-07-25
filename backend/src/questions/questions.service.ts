@@ -7,6 +7,7 @@ import {
   ContentStatus,
   DifficultyLevel,
   Prisma,
+  QuestionSource,
   QuestionType,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +15,12 @@ import { GeminiService } from '../ai/gemini.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { GenerateQuestionsDto } from './dto/generate-questions.dto';
+import { ParseExamImportDto } from './dto/parse-exam-import.dto';
+import { CommitImportedQuestionsDto } from './dto/commit-imported-questions.dto';
+import {
+  buildParseImportPrompt,
+  type ParsedImportQuestion,
+} from './ai-question-import.parser';
 import {
   buildSynthesizePrompt,
   synthesizeQuestion,
@@ -76,6 +83,7 @@ export class QuestionsService {
         correctAnswer: dto.correctAnswer as Prisma.InputJsonValue,
         createdById: user.sub,
         status: ContentStatus.APPROVED,
+        source: QuestionSource.ADMIN_MANUAL,
       },
     });
   }
@@ -112,6 +120,7 @@ export class QuestionsService {
             explanation: synthesized.explanation,
             createdById: user.sub,
             status: ContentStatus.PENDING_APPROVAL,
+            source: QuestionSource.AI_GENERATED,
           },
         });
       }),
@@ -143,6 +152,9 @@ export class QuestionsService {
           ? { id: { notIn: params.excludeIds } }
           : {}),
       },
+      // Ưu tiên câu hỏi nhập từ đề thật (IMPORTED_REAL đứng trước trong khai
+      // báo enum) trước khi dùng câu AI tự sinh — xem QuestionSource.
+      orderBy: { source: 'asc' },
       take: params.count,
     });
     if (existing.length >= params.count) {
@@ -184,6 +196,7 @@ export class QuestionsService {
             // tiêu là đề phải sẵn sàng tức thời. ADMIN vẫn có thể rút lại sau
             // qua reject() nếu phát hiện nội dung có vấn đề.
             status: ContentStatus.APPROVED,
+            source: QuestionSource.AI_GENERATED,
           },
         });
       }),
@@ -201,6 +214,7 @@ export class QuestionsService {
   }) {
     const existing = await this.prisma.question.findMany({
       where: { topicId: params.topicId, status: ContentStatus.APPROVED },
+      orderBy: { source: 'asc' },
       take: params.count,
     });
     if (existing.length >= params.count) {
@@ -236,11 +250,89 @@ export class QuestionsService {
             explanation: synthesized.explanation,
             createdById: params.creatorId,
             status: ContentStatus.APPROVED,
+            source: QuestionSource.AI_GENERATED,
           },
         });
       }),
     );
     return [...existing, ...synthesizedRows];
+  }
+
+  // Bước 1/2 của luồng nhập đề thi thật: AI tách văn bản thô ADMIN dán vào
+  // thành danh sách câu hỏi có cấu trúc — CHỈ trả về bản nháp, KHÔNG ghi vào
+  // CSDL. ADMIN phải rà soát/sửa (đặc biệt gán đúng topicId) rồi mới gọi
+  // commitImportedQuestions() để thực sự lưu vào kho.
+  async parseImportDraft(
+    dto: ParseExamImportDto,
+  ): Promise<ParsedImportQuestion[]> {
+    if (!this.gemini.isConfigured()) {
+      throw new BadRequestException(
+        'Tính năng nhập đề thi thật cần cấu hình GEMINI_API_KEY trên máy chủ',
+      );
+    }
+    const [subject, topics] = await Promise.all([
+      this.prisma.subject.findUnique({ where: { id: dto.subjectId } }),
+      this.prisma.topic.findMany({
+        where: { subjectId: dto.subjectId },
+        select: { name: true },
+      }),
+    ]);
+    if (!subject) {
+      throw new NotFoundException('Không tìm thấy môn học');
+    }
+
+    const prompt = buildParseImportPrompt({
+      subjectName: subject.name,
+      topicNames: topics.map((t) => t.name),
+      rawText: dto.rawText,
+    });
+    const parsed =
+      await this.gemini.generateJson<ParsedImportQuestion[]>(prompt);
+    if (!Array.isArray(parsed)) {
+      throw new BadRequestException(
+        'AI không tách được câu hỏi hợp lệ từ văn bản đã cung cấp — hãy thử lại với văn bản rõ ràng hơn',
+      );
+    }
+    return parsed;
+  }
+
+  // Bước 2/2: ADMIN đã rà soát bản nháp và gán topicId thật — ghi thẳng vào
+  // kho dùng chung (APPROVED, source=IMPORTED_REAL) vì ADMIN là người duyệt
+  // cuối cùng, giống hệt create() thủ công.
+  async commitImportedQuestions(
+    user: JwtPayload,
+    dto: CommitImportedQuestionsDto,
+  ) {
+    const topicIds = [...new Set(dto.questions.map((q) => q.topicId))];
+    const validTopics = await this.prisma.topic.findMany({
+      where: { id: { in: topicIds }, subjectId: dto.subjectId },
+      select: { id: true },
+    });
+    const validTopicIds = new Set(validTopics.map((t) => t.id));
+    for (const q of dto.questions) {
+      if (!validTopicIds.has(q.topicId)) {
+        throw new BadRequestException(
+          `Chuyên đề ${q.topicId} không thuộc môn học này`,
+        );
+      }
+      assertValidTrueFalse(q);
+    }
+
+    return this.prisma.question.createMany({
+      data: dto.questions.map((q) => ({
+        subjectId: dto.subjectId,
+        topicId: q.topicId,
+        type: q.type,
+        difficulty: q.difficulty,
+        content: q.content,
+        options: (q.options ?? null) as Prisma.InputJsonValue,
+        correctAnswer: (q.correctAnswer ?? null) as Prisma.InputJsonValue,
+        explanation: q.explanation,
+        createdById: user.sub,
+        status: ContentStatus.APPROVED,
+        source: QuestionSource.IMPORTED_REAL,
+      })),
+    });
   }
 
   findAll(status?: ContentStatus) {

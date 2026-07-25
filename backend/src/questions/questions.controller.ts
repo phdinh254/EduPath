@@ -15,6 +15,8 @@ import { QuestionsService } from './questions.service';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { RejectQuestionDto } from './dto/reject-question.dto';
 import { GenerateQuestionsDto } from './dto/generate-questions.dto';
+import { ParseExamImportDto } from './dto/parse-exam-import.dto';
+import { CommitImportedQuestionsDto } from './dto/commit-imported-questions.dto';
 
 // Giáo viên không còn tự soạn câu hỏi — toàn bộ ngân hàng câu hỏi do ADMIN
 // tạo thủ công hoặc do AI tự sinh (xem POST /questions/generate và luồng ghép
@@ -50,6 +52,34 @@ export class QuestionsController {
   })
   generate(@CurrentUser() user: JwtPayload, @Body() dto: GenerateQuestionsDto) {
     return this.questionsService.generateBatch(user, dto);
+  }
+
+  @Post('import/parse')
+  @ApiOperation({
+    summary: 'Tách câu hỏi từ văn bản đề thi thật (bản nháp)',
+    description:
+      'Chỉ ADMIN. Dán văn bản thô của một đề thi thật (thi thử/đề chính thức các năm trước), AI tách thành danh sách câu hỏi có cấu trúc để ADMIN rà soát. KHÔNG ghi vào CSDL ở bước này — xem POST /questions/import/commit.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Danh sách câu hỏi nháp (chưa lưu).',
+  })
+  parseImport(@Body() dto: ParseExamImportDto) {
+    return this.questionsService.parseImportDraft(dto);
+  }
+
+  @Post('import/commit')
+  @ApiOperation({
+    summary: 'Ghi câu hỏi đã rà soát vào kho dùng chung',
+    description:
+      'Chỉ ADMIN. Dùng sau khi đã sửa bản nháp từ POST /questions/import/parse — ghi thẳng vào kho (status=APPROVED, source=IMPORTED_REAL) vì ADMIN đã tự rà soát.',
+  })
+  @ApiResponse({ status: 201, description: 'Đã ghi câu hỏi vào kho.' })
+  commitImport(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CommitImportedQuestionsDto,
+  ) {
+    return this.questionsService.commitImportedQuestions(user, dto);
   }
 
   @Get()

@@ -45,3 +45,45 @@ export async function rejectQuestion(id: string, reason?: string): Promise<Quest
   const { data } = await apiClient.post<Question>(`/questions/${id}/reject`, { reason });
   return data;
 }
+
+export interface ParsedImportQuestion {
+  content: string;
+  type: QuestionType;
+  options: unknown;
+  correctAnswer: unknown;
+  explanation: string | null;
+  suggestedTopicName: string;
+  suggestedDifficulty: DifficultyLevel;
+}
+
+// Bước 1: AI tách văn bản thô đề thi thật thành câu hỏi có cấu trúc — chỉ
+// trả về bản nháp, KHÔNG lưu vào kho.
+export async function parseExamImport(subjectId: string, rawText: string): Promise<ParsedImportQuestion[]> {
+  const { data } = await apiClient.post<ParsedImportQuestion[]>('/questions/import/parse', {
+    subjectId,
+    rawText,
+  });
+  return data;
+}
+
+export interface CommitImportedQuestionItem {
+  topicId: string;
+  type: QuestionType;
+  difficulty: DifficultyLevel;
+  content: string;
+  options?: unknown;
+  correctAnswer?: unknown;
+  explanation?: string;
+}
+
+// Bước 2: ghi các câu hỏi đã ADMIN rà soát vào kho dùng chung (APPROVED, source=IMPORTED_REAL).
+export async function commitImportedQuestions(
+  subjectId: string,
+  questions: CommitImportedQuestionItem[],
+): Promise<{ count: number }> {
+  const { data } = await apiClient.post<{ count: number }>('/questions/import/commit', {
+    subjectId,
+    questions,
+  });
+  return data;
+}

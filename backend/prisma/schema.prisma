@@ -41,6 +41,16 @@ enum ContentStatus {
   REJECTED
 }
 
+// Thứ tự khai báo quyết định thứ tự ORDER BY trên Postgres (kiểu enum gốc
+// sắp xếp theo thứ tự khai báo, không phải theo alphabet) — IMPORTED_REAL
+// đứng trước để pickOrSynthesizeQuestions/pickQuestionsByTopic ưu tiên chọn
+// câu hỏi từ đề thật trước khi dùng câu AI tự sinh.
+enum QuestionSource {
+  IMPORTED_REAL // nhập từ đề thi thật (thi thử, đề chính thức các năm trước)
+  ADMIN_MANUAL // admin tự soạn thủ công
+  AI_GENERATED // AI tự sinh nội dung mới
+}
+
 enum AttemptStatus {
   IN_PROGRESS
   SUBMITTED
@@ -215,6 +225,10 @@ model Question {
   status ContentStatus @default(PENDING_APPROVAL)
   // Lý do admin từ chối đề xuất (status=REJECTED)
   rejectReason String?
+
+  // Nguồn gốc nội dung — mặc định ADMIN_MANUAL vì phần lớn dữ liệu hiện có
+  // (seed-question-bank.ts) là tự biên soạn thủ công, không phải AI sinh.
+  source QuestionSource @default(ADMIN_MANUAL)
 
   examQuestions ExamQuestion[]
   answers       Answer[]
