@@ -8,6 +8,7 @@ import { fetchMyBadges } from '../../features/gamification/gamificationApi';
 import { fetchSubjects, fetchTopics } from '../../features/subjects/subjectsApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
+import { ReadinessCard } from '../../components/ReadinessCard';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
 import { Button, Card, PageHeader } from '../../components/ui/Card';
 import { StatCard } from '../../components/ui/StatCard';
@@ -292,6 +293,8 @@ export function StudentRoadmapPage() {
         subtitle="Phân tích tự động sau mỗi bài thi, kèm lời khuyên ôn tập do AI viết riêng cho bạn"
         icon={<RouteIcon className="h-5 w-5" />}
       />
+
+      <ReadinessCard subjectNameById={subjectNameById} />
 
       <ProgressDashboard />
 

@@ -13,6 +13,7 @@ import { GradingModule } from './grading/grading.module';
 import { RoadmapModule } from './roadmap/roadmap.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { GamificationModule } from './gamification/gamification.module';
+import { ReadinessModule } from './readiness/readiness.module';
 import { AdminModule } from './admin/admin.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -30,6 +31,7 @@ import { RolesGuard } from './auth/guards/roles.guard';
     RoadmapModule,
     NotificationsModule,
     GamificationModule,
+    ReadinessModule,
     AdminModule,
   ],
   controllers: [AppController],
