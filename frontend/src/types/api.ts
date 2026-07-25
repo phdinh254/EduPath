@@ -251,8 +251,21 @@ export interface ApiErrorBody {
 
 export interface StudentNotification {
   id: string;
-  type: 'NEW_ADVICE' | 'REMINDER';
+  type: 'NEW_ADVICE' | 'REMINDER' | 'STREAK_RISK';
   message: string;
   createdAt: string;
   subjectId?: string;
+}
+
+export interface StreakInfo {
+  currentStreak: number;
+  longestStreak: number;
+  isActiveToday: boolean;
+}
+
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+  earned: boolean;
 }

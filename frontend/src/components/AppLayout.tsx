@@ -3,6 +3,8 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/AuthContext';
 import { Logo } from './Logo';
 import { NotificationBell } from './NotificationBell';
+import { StreakBadge } from './StreakBadge';
+import { BadgeEarnedWatcher } from './BadgeEarnedWatcher';
 import {
   BookIcon,
   ChartIcon,
@@ -77,7 +79,13 @@ export function AppLayout() {
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-3">
-            {user.role === 'STUDENT' && <NotificationBell />}
+            {user.role === 'STUDENT' && (
+              <>
+                <BadgeEarnedWatcher />
+                <StreakBadge />
+                <NotificationBell />
+              </>
+            )}
             <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 py-1 pl-1 pr-3 dark:border-slate-800">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white">
                 {initials(user.fullName)}

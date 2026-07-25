@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchMyNotifications, markNotificationsRead } from '../features/notifications/notificationsApi';
-import { BellIcon, RouteIcon, SparklesIcon } from './ui/Icons';
+import { AwardIcon, BellIcon, RouteIcon, SparklesIcon } from './ui/Icons';
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -67,6 +67,8 @@ export function NotificationBell() {
                   <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
                     {n.type === 'NEW_ADVICE' ? (
                       <SparklesIcon className="h-3.5 w-3.5" />
+                    ) : n.type === 'STREAK_RISK' ? (
+                      <AwardIcon className="h-3.5 w-3.5" />
                     ) : (
                       <RouteIcon className="h-3.5 w-3.5" />
                     )}
