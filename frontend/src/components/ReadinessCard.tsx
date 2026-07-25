@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchMyReadiness } from '../features/readiness/readinessApi';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { fetchMyReadiness, fetchReadinessHistory } from '../features/readiness/readinessApi';
 import { Card } from './ui/Card';
 import { SparklesIcon, TargetIcon } from './ui/Icons';
 import { LoadingState } from './StateViews';
@@ -69,6 +70,43 @@ function BreakdownBar({ label, value }: { label: string; value: number }) {
   );
 }
 
+function ReadinessHistoryChart({ subjectId }: { subjectId: string }) {
+  const historyQuery = useQuery({
+    queryKey: ['readiness-history', subjectId],
+    queryFn: () => fetchReadinessHistory(subjectId),
+  });
+
+  if (!historyQuery.data || historyQuery.data.length < 2) return null;
+
+  return (
+    <div className="mt-5">
+      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+        Xu hướng điểm sẵn sàng theo thời gian
+      </p>
+      <div className="h-32">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={historyQuery.data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-200 dark:text-slate-800" />
+            <XAxis
+              dataKey="dateKey"
+              tick={{ fontSize: 11 }}
+              stroke="currentColor"
+              className="text-slate-500"
+              tickFormatter={(d: string) => d.slice(5)}
+            />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke="currentColor" className="text-slate-500" />
+            <Tooltip
+              contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 13 }}
+              formatter={(value) => [value, 'Điểm sẵn sàng']}
+            />
+            <Line type="monotone" dataKey="readinessScore" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 export function ReadinessCard({ subjectNameById }: { subjectNameById: Map<string, string> }) {
   const readinessQuery = useQuery({ queryKey: ['my-readiness'], queryFn: fetchMyReadiness });
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
@@ -130,6 +168,7 @@ export function ReadinessCard({ subjectNameById }: { subjectNameById: Map<string
             <BreakdownBar key={key} label={BREAKDOWN_LABEL[key] ?? key} value={value} />
           ))}
         </div>
+        <ReadinessHistoryChart subjectId={active.subjectId} />
       </Card>
     </div>
   );

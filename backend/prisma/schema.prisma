@@ -74,13 +74,14 @@ model User {
   // Notification riêng.
   lastNotificationsReadAt DateTime?
 
-  createdQuestions Question[]      @relation("QuestionCreatedBy")
-  createdExams     Exam[]          @relation("ExamCreatedBy")
-  examAttempts     ExamAttempt[]
-  examLikes        ExamLike[]
-  scoreOverrides   ScoreOverride[]
-  refreshTokens    RefreshToken[]
-  auditLogs        AuditLog[]
+  createdQuestions   Question[]          @relation("QuestionCreatedBy")
+  createdExams       Exam[]              @relation("ExamCreatedBy")
+  examAttempts       ExamAttempt[]
+  examLikes          ExamLike[]
+  scoreOverrides     ScoreOverride[]
+  refreshTokens      RefreshToken[]
+  auditLogs          AuditLog[]
+  readinessSnapshots ReadinessSnapshot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -414,6 +415,24 @@ model StudyRoadmap {
   generatedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([studentId, subjectId])
+}
+
+// Chụp lại "Điểm sẵn sàng thi" mỗi ngày để vẽ biểu đồ xu hướng — điểm số tự
+// nó luôn tính lại được tại chỗ (ReadinessService), bảng này chỉ lưu lịch sử
+// theo thời gian mà không thể suy ngược lại từ dữ liệu hiện có. Mỗi ngày chỉ
+// giữ 1 bản ghi mới nhất cho mỗi (học sinh, môn) — upsert theo dateKey.
+model ReadinessSnapshot {
+  id             String @id @default(cuid())
+  studentId      String
+  student        User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId      String
+  readinessScore Int
+  dateKey        String // YYYY-MM-DD (UTC)
+
+  capturedAt DateTime @default(now())
+
+  @@unique([studentId, subjectId, dateKey])
   @@index([studentId, subjectId])
 }
 

@@ -52,6 +52,49 @@ export class ReadinessService {
     studentId: string,
     subjectId: string,
   ): Promise<ReadinessResult> {
+    const computed = await this.computeReadiness(studentId, subjectId);
+    const aiNote = await this.buildAiNote(
+      computed.subjectName,
+      computed.readinessScore,
+      computed.breakdown,
+    );
+    return {
+      subjectId,
+      readinessScore: computed.readinessScore,
+      breakdown: computed.breakdown,
+      predictedScoreRange: computed.predictedScoreRange,
+      aiNote,
+    };
+  }
+
+  // Chỉ lưu điểm số (không sinh aiNote — tránh gọi Gemini chặn luồng chấm
+  // bài) — gọi ngay sau khi một lượt làm bài được chấm xong, mỗi ngày chỉ
+  // giữ 1 bản ghi mới nhất cho mỗi (học sinh, môn) nhờ upsert theo dateKey.
+  async snapshotReadiness(studentId: string, subjectId: string) {
+    const { readinessScore } = await this.computeReadiness(
+      studentId,
+      subjectId,
+    );
+    const dateKey = new Date().toISOString().slice(0, 10);
+    await this.prisma.readinessSnapshot.upsert({
+      where: {
+        studentId_subjectId_dateKey: { studentId, subjectId, dateKey },
+      },
+      create: { studentId, subjectId, dateKey, readinessScore },
+      update: { readinessScore },
+    });
+  }
+
+  getReadinessHistory(studentId: string, subjectId: string, days = 30) {
+    const since = new Date(Date.now() - days * ONE_DAY_MS);
+    return this.prisma.readinessSnapshot.findMany({
+      where: { studentId, subjectId, capturedAt: { gte: since } },
+      orderBy: { dateKey: 'asc' },
+      select: { dateKey: true, readinessScore: true },
+    });
+  }
+
+  private async computeReadiness(studentId: string, subjectId: string) {
     const [subject, topicsCount, attempts, latestAnalysis, streak] =
       await Promise.all([
         this.prisma.subject.findUniqueOrThrow({ where: { id: subjectId } }),
@@ -144,15 +187,8 @@ export class ReadinessService {
         ? this.buildPredictedRange(readinessScore, subjectPercentagesDesc)
         : null;
 
-    const aiNote = await this.buildAiNote(subject.name, readinessScore, {
-      score: scoreComponent,
-      coverage: coverageComponent,
-      mastery: masteryComponent,
-      consistency: consistencyComponent,
-    });
-
     return {
-      subjectId,
+      subjectName: subject.name,
       readinessScore,
       breakdown: {
         score: Math.round(scoreComponent),
@@ -161,7 +197,6 @@ export class ReadinessService {
         consistency: Math.round(consistencyComponent),
       },
       predictedScoreRange,
-      aiNote,
     };
   }
 

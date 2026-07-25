@@ -22,3 +22,15 @@ export async function fetchMyReadiness(): Promise<MyReadiness> {
   const { data } = await apiClient.get<MyReadiness>('/readiness/me');
   return data;
 }
+
+export interface ReadinessHistoryPoint {
+  dateKey: string;
+  readinessScore: number;
+}
+
+export async function fetchReadinessHistory(subjectId: string): Promise<ReadinessHistoryPoint[]> {
+  const { data } = await apiClient.get<ReadinessHistoryPoint[]>('/readiness/me/history', {
+    params: { subjectId },
+  });
+  return data;
+}

@@ -8,6 +8,7 @@ import {
 import { AttemptStatus, QuestionType, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoadmapService } from '../roadmap/roadmap.service';
+import { ReadinessService } from '../readiness/readiness.service';
 import { GeminiService } from '../ai/gemini.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import {
@@ -27,6 +28,7 @@ export class GradingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly roadmapService: RoadmapService,
+    private readonly readinessService: ReadinessService,
     private readonly gemini: GeminiService,
   ) {}
 
@@ -361,6 +363,29 @@ Trả lời bằng 2-4 câu văn tiếng Việt thuần, không dùng định d�
     });
 
     await this.roadmapService.generateForAttempt(attemptId);
+
+    // Chụp lại "Điểm sẵn sàng thi" của từng môn xuất hiện trong lượt làm này
+    // để phục vụ biểu đồ xu hướng — không chặn việc trả kết quả nếu lỗi.
+    const touchedSubjectIds = new Set(
+      Object.values(topicBreakdown).map((s) => s.subjectId),
+    );
+    if (touchedSubjectIds.size > 0) {
+      const attempt = await this.prisma.examAttempt.findUnique({
+        where: { id: attemptId },
+        select: { studentId: true },
+      });
+      if (attempt) {
+        await Promise.all(
+          [...touchedSubjectIds].map((subjectId) =>
+            this.readinessService
+              .snapshotReadiness(attempt.studentId, subjectId)
+              .catch(() => {
+                /* không để lỗi chụp snapshot ảnh hưởng việc trả kết quả chấm bài */
+              }),
+          ),
+        );
+      }
+    }
 
     return this.prisma.examAttempt.findUnique({
       where: { id: attemptId },

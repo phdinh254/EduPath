@@ -8,5 +8,6 @@ import { ReadinessController } from './readiness.controller';
   imports: [AiModule, GamificationModule],
   providers: [ReadinessService],
   controllers: [ReadinessController],
+  exports: [ReadinessService],
 })
 export class ReadinessModule {}
