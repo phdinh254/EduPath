@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { fetchAttempt, fetchExam, fetchExamQuestions, saveAnswer, startAttempt } from '../../features/exams/examsApi';
+import {
+  fetchAttempt,
+  fetchExam,
+  fetchExamQuestions,
+  saveAnswer,
+  saveAnswerTime,
+  startAttempt,
+} from '../../features/exams/examsApi';
 import { submitAttempt } from '../../features/grading/gradingApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
@@ -247,6 +254,7 @@ export function StudentExamAttemptPage() {
       setRemainingSeconds(secs);
       if (secs === 0 && !autoSubmittedRef.current && attemptId) {
         autoSubmittedRef.current = true;
+        flushPendingTime();
         submitMutation.mutate();
       }
     }
@@ -260,6 +268,39 @@ export function StudentExamAttemptPage() {
     setAnswers((prev) => ({ ...prev, [questionId]: response }));
     saveMutation.mutate({ questionId, response });
   }
+
+  // Ghi nhận thời gian làm từng câu — phục vụ phân tích điểm yếu AI (câu/chuyên
+  // đề mất nhiều thời gian bất thường). Dùng ref thay vì cleanup của effect vì
+  // cần chốt thời gian TRƯỚC khi gọi nộp bài (chứ không phải sau, lúc đó lượt
+  // làm bài đã kết thúc và backend sẽ từ chối ghi nhận thêm).
+  const timeTrackingRef = useRef<{ questionId: string; enteredAt: number } | null>(null);
+
+  function flushPendingTime() {
+    const track = timeTrackingRef.current;
+    timeTrackingRef.current = null;
+    if (!track || !attemptId) return;
+    const elapsed = Math.round((Date.now() - track.enteredAt) / 1000);
+    if (elapsed > 0) {
+      saveAnswerTime(attemptId, track.questionId, elapsed).catch(() => {
+        /* mất một khoảng thời gian ghi nhận không ảnh hưởng bài làm chính */
+      });
+    }
+  }
+
+  const currentQuestionId = questionsQuery.data?.[currentIndex]?.questionId;
+  useEffect(() => {
+    flushPendingTime();
+    if (currentQuestionId && attemptId) {
+      timeTrackingRef.current = { questionId: currentQuestionId, enteredAt: Date.now() };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionId, attemptId]);
+
+  // Rời trang giữa chừng (bấm Thoát) mà không qua nộp bài — vẫn chốt thời gian còn dang dở.
+  useEffect(() => {
+    return () => flushPendingTime();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (startError) return <ErrorState message={startError} />;
   if (!attemptId || questionsQuery.isLoading) return <LoadingState label="Đang chuẩn bị bài thi..." />;
@@ -360,7 +401,14 @@ export function StudentExamAttemptPage() {
           ← Câu trước
         </Button>
         {isLast ? (
-          <Button variant="success" onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}>
+          <Button
+            variant="success"
+            onClick={() => {
+              flushPendingTime();
+              submitMutation.mutate();
+            }}
+            disabled={submitMutation.isPending}
+          >
             {submitMutation.isPending ? 'Đang nộp bài...' : 'Nộp bài'}
           </Button>
         ) : (

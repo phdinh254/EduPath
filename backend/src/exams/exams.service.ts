@@ -466,6 +466,7 @@ export class ExamsService {
     user: JwtPayload,
     questionId: string,
     response: unknown,
+    timeSpentSeconds?: number,
   ) {
     const attempt = await this.findAttemptOrThrow(attemptId);
     if (attempt.studentId !== user.sub) {
@@ -493,8 +494,14 @@ export class ExamsService {
         attemptId,
         questionId,
         response: response as Prisma.InputJsonValue,
+        timeSpentSeconds: timeSpentSeconds ?? 0,
       },
-      update: { response: response as Prisma.InputJsonValue },
+      update: {
+        response: response as Prisma.InputJsonValue,
+        ...(timeSpentSeconds
+          ? { timeSpentSeconds: { increment: timeSpentSeconds } }
+          : {}),
+      },
     });
   }
 

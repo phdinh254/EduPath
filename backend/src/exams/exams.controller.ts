@@ -239,6 +239,7 @@ export class ExamsController {
       user,
       dto.questionId,
       dto.response,
+      dto.timeSpentSeconds,
     );
   }
 }

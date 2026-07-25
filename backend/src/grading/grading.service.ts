@@ -318,7 +318,13 @@ Trả lời bằng 2-4 câu văn tiếng Việt thuần, không dùng định d�
 
     const topicBreakdown: Record<
       string,
-      { correct: number; total: number; subjectId: string }
+      {
+        correct: number;
+        total: number;
+        subjectId: string;
+        timeSpentSeconds: number;
+        byType: Record<string, { correct: number; total: number }>;
+      }
     > = {};
     for (const a of answers) {
       if (a.question.type === QuestionType.ESSAY) continue; // không tính vào tỷ lệ đúng/sai nhị phân
@@ -326,9 +332,19 @@ Trả lời bằng 2-4 câu văn tiếng Việt thuần, không dùng định d�
         correct: 0,
         total: 0,
         subjectId: a.question.subjectId,
+        timeSpentSeconds: 0,
+        byType: {},
       };
       entry.total += 1;
+      entry.timeSpentSeconds += a.timeSpentSeconds;
       if (a.isCorrect) entry.correct += 1;
+      const typeEntry = entry.byType[a.question.type] ?? {
+        correct: 0,
+        total: 0,
+      };
+      typeEntry.total += 1;
+      if (a.isCorrect) typeEntry.correct += 1;
+      entry.byType[a.question.type] = typeEntry;
       topicBreakdown[a.question.topicId] = entry;
     }
 

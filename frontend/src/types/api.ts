@@ -130,6 +130,7 @@ export interface Answer {
   attemptId: string;
   questionId: string;
   response: unknown;
+  timeSpentSeconds: number;
   isCorrect: boolean | null;
   scoreAwarded: number | null;
   aiPreliminaryScore: number | null;
@@ -143,7 +144,16 @@ export interface Score {
   id: string;
   attemptId: string;
   totalScore: number;
-  topicBreakdown: Record<string, { correct: number; total: number; subjectId: string }>;
+  topicBreakdown: Record<
+    string,
+    {
+      correct: number;
+      total: number;
+      subjectId: string;
+      timeSpentSeconds: number;
+      byType: Record<string, { correct: number; total: number }>;
+    }
+  >;
   gradedAt: string;
 }
 
@@ -187,7 +197,7 @@ export interface WeaknessAnalysis {
   studentId: string;
   subjectId: string;
   attemptId: string | null;
-  weakTopics: { topicId: string; correct: number; total: number }[];
+  weakTopics: { topicId: string; correct: number; total: number; persistentCount: number }[];
   // adviceByTopic được AI sinh nền sau khi chấm — có thể chưa xuất hiện ngay.
   details: { adviceByTopic?: Record<string, string> } | null;
   generatedAt: string;

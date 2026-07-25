@@ -80,8 +80,20 @@ export async function startAttempt(examId: string): Promise<ExamAttempt> {
   return data;
 }
 
-export async function saveAnswer(attemptId: string, questionId: string, response: unknown): Promise<void> {
-  await apiClient.post(`/exams/attempts/${attemptId}/answers`, { questionId, response });
+export async function saveAnswer(
+  attemptId: string,
+  questionId: string,
+  response: unknown,
+  timeSpentSeconds?: number,
+): Promise<void> {
+  await apiClient.post(`/exams/attempts/${attemptId}/answers`, { questionId, response, timeSpentSeconds });
+}
+
+// Chỉ gửi thời gian vừa dừng ở câu này (không kèm response) — dùng khi học
+// sinh chuyển câu mà không thay đổi câu trả lời, để vẫn ghi nhận thời gian
+// làm bài phục vụ phân tích điểm yếu theo AI.
+export async function saveAnswerTime(attemptId: string, questionId: string, timeSpentSeconds: number): Promise<void> {
+  await apiClient.post(`/exams/attempts/${attemptId}/answers`, { questionId, timeSpentSeconds });
 }
 
 export async function fetchAttempt(attemptId: string): Promise<ExamAttempt> {

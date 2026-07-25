@@ -7,14 +7,30 @@ import { GeminiService } from '../ai/gemini.service';
 const WEAK_TOPIC_THRESHOLD = 0.5;
 
 interface TopicBreakdown {
-  [topicId: string]: { correct: number; total: number; subjectId: string };
+  [topicId: string]: {
+    correct: number;
+    total: number;
+    subjectId: string;
+    timeSpentSeconds: number;
+    byType: Record<string, { correct: number; total: number }>;
+  };
 }
 
 interface WeakTopic {
   topicId: string;
   correct: number;
   total: number;
+  timeSpentSeconds: number;
+  byType: Record<string, { correct: number; total: number }>;
+  // Số lượt phân tích gần đây (tính cả lần này) mà chuyên đề này liên tục
+  // yếu — dùng để ưu tiên lời khuyên AI và cảnh báo "yếu kéo dài" ở frontend.
+  persistentCount: number;
 }
+
+// Số lượt phân tích gần nhất (không tính lượt hiện tại) được xem xét để phát
+// hiện điểm yếu kéo dài qua nhiều lần làm bài, đúng theo yêu cầu nghiệp vụ
+// "lịch sử nhiều lần kiểm tra" thay vì chỉ nhìn lượt vừa nộp.
+const HISTORY_WINDOW = 3;
 
 // Các giai đoạn ôn tập theo từng chuyên đề yếu — quy tắc rule-based cho MVP,
 // sẽ được thay bằng lời gọi LLM API thật khi tích hợp AI đề xuất nội dung học.
@@ -46,7 +62,10 @@ export class RoadmapService {
     if (!attempt?.score) return;
 
     const breakdown = attempt.score.topicBreakdown as unknown as TopicBreakdown;
-    const weakTopicsBySubject = new Map<string, WeakTopic[]>();
+    const weakTopicsBySubject = new Map<
+      string,
+      Array<Omit<WeakTopic, 'persistentCount'>>
+    >();
     for (const [topicId, stats] of Object.entries(breakdown)) {
       if (
         stats.total === 0 ||
@@ -55,7 +74,13 @@ export class RoadmapService {
         continue;
       }
       const list = weakTopicsBySubject.get(stats.subjectId) ?? [];
-      list.push({ topicId, correct: stats.correct, total: stats.total });
+      list.push({
+        topicId,
+        correct: stats.correct,
+        total: stats.total,
+        timeSpentSeconds: stats.timeSpentSeconds ?? 0,
+        byType: stats.byType ?? {},
+      });
       weakTopicsBySubject.set(stats.subjectId, list);
     }
 
@@ -65,7 +90,12 @@ export class RoadmapService {
       Object.values(breakdown).map((s) => s.subjectId),
     );
     for (const subjectId of subjectIdsInAttempt) {
-      const weakTopics = weakTopicsBySubject.get(subjectId) ?? [];
+      const currentWeakTopics = weakTopicsBySubject.get(subjectId) ?? [];
+      const weakTopics = await this.withPersistentCount(
+        attempt.studentId,
+        subjectId,
+        currentWeakTopics,
+      );
       const subjectBreakdown = Object.fromEntries(
         Object.entries(breakdown).filter(([, s]) => s.subjectId === subjectId),
       );
@@ -99,6 +129,39 @@ export class RoadmapService {
     }
   }
 
+  // Nhìn lại tối đa HISTORY_WINDOW lượt phân tích gần nhất (không tính lượt
+  // hiện tại) của cùng học sinh/môn để tính số lần liên tiếp một chuyên đề
+  // xuất hiện là điểm yếu — đúng yêu cầu nghiệp vụ dựa vào "lịch sử nhiều lần
+  // kiểm tra", không chỉ một lượt làm bài đơn lẻ.
+  private async withPersistentCount(
+    studentId: string,
+    subjectId: string,
+    currentWeakTopics: Array<Omit<WeakTopic, 'persistentCount'>>,
+  ): Promise<WeakTopic[]> {
+    if (currentWeakTopics.length === 0) return [];
+
+    const pastAnalyses = await this.prisma.weaknessAnalysis.findMany({
+      where: { studentId, subjectId },
+      orderBy: { generatedAt: 'desc' },
+      take: HISTORY_WINDOW,
+      select: { weakTopics: true },
+    });
+    const pastWeakTopicIdSets = pastAnalyses.map(
+      (a) =>
+        new Set(
+          (a.weakTopics as unknown as Array<{ topicId: string }>).map(
+            (wt) => wt.topicId,
+          ),
+        ),
+    );
+
+    return currentWeakTopics.map((wt) => ({
+      ...wt,
+      persistentCount:
+        1 + pastWeakTopicIdSets.filter((s) => s.has(wt.topicId)).length,
+    }));
+  }
+
   private async generateAdviceInBackground(
     weaknessAnalysisId: string,
     weakTopics: WeakTopic[],
@@ -108,10 +171,26 @@ export class RoadmapService {
     });
     const topicNameById = new Map(topics.map((t) => [t.id, t.name]));
 
+    // Ưu tiên sinh lời khuyên cho chuyên đề yếu kéo dài lâu nhất trước — nếu
+    // Gemini gặp lỗi giữa chừng, các chuyên đề quan trọng nhất vẫn có lời khuyên.
+    const sortedWeakTopics = [...weakTopics].sort(
+      (a, b) => b.persistentCount - a.persistentCount,
+    );
+
     const adviceByTopic: Record<string, string> = {};
-    for (const wt of weakTopics) {
+    for (const wt of sortedWeakTopics) {
       const topicName = topicNameById.get(wt.topicId) ?? wt.topicId;
-      const prompt = `Bạn là gia sư luyện thi THPT tại Việt Nam. Học sinh làm đúng ${wt.correct}/${wt.total} câu ở chuyên đề "${topicName}" — đây là chuyên đề yếu cần ưu tiên ôn tập. Hãy viết 2-3 câu lời khuyên cụ thể, thực tế bằng tiếng Việt giúp học sinh cải thiện chuyên đề này (nên ôn lại phần nào, luyện dạng bài gì). Chỉ trả về đoạn văn lời khuyên, không dùng JSON, không nhắc lại số liệu đã cho.`;
+      const avgSeconds =
+        wt.total > 0 ? Math.round(wt.timeSpentSeconds / wt.total) : 0;
+      const persistentNote =
+        wt.persistentCount > 1
+          ? ` Đây là chuyên đề học sinh làm yếu liên tục ${wt.persistentCount} lần kiểm tra gần đây, cần ưu tiên ôn tập ngay.`
+          : '';
+      const timeNote =
+        avgSeconds > 0
+          ? ` Trung bình mất khoảng ${avgSeconds} giây/câu ở chuyên đề này.`
+          : '';
+      const prompt = `Bạn là gia sư luyện thi THPT tại Việt Nam. Học sinh làm đúng ${wt.correct}/${wt.total} câu ở chuyên đề "${topicName}" — đây là chuyên đề yếu cần ưu tiên ôn tập.${persistentNote}${timeNote} Hãy viết 2-3 câu lời khuyên cụ thể, thực tế bằng tiếng Việt giúp học sinh cải thiện chuyên đề này (nên ôn lại phần nào, luyện dạng bài gì, có cần luyện tốc độ làm bài không). Chỉ trả về đoạn văn lời khuyên, không dùng JSON, không nhắc lại số liệu đã cho.`;
       try {
         adviceByTopic[wt.topicId] = await this.gemini.generateText(prompt);
       } catch {

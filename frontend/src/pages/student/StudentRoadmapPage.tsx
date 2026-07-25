@@ -156,9 +156,16 @@ export function StudentRoadmapPage() {
                       key={wt.topicId}
                       className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/50 dark:bg-amber-500/5"
                     >
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                        Chuyên đề cần ôn tập ưu tiên — đúng {wt.correct}/{wt.total} câu
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                          Chuyên đề cần ôn tập ưu tiên — đúng {wt.correct}/{wt.total} câu
+                        </p>
+                        {wt.persistentCount > 1 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-400">
+                            Yếu liên tục {wt.persistentCount} lần
+                          </span>
+                        )}
+                      </div>
                       {advice && (
                         <p className="mt-2 flex items-start gap-2 rounded-lg bg-white/70 p-2.5 text-xs text-slate-600 dark:bg-slate-900/50 dark:text-slate-400">
                           <SparklesIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-500" />

@@ -330,6 +330,12 @@ model Answer {
   // Câu trả lời của học sinh, cấu trúc tuỳ theo loại câu hỏi
   response Json?
 
+  // Tổng thời gian (giây) học sinh dừng ở câu này trong lúc làm bài — tích
+  // lũy dần qua các lần lưu (frontend gửi phần chênh lệch mỗi lần chuyển
+  // câu), dùng để phát hiện câu/chuyên đề học sinh mất nhiều thời gian bất
+  // thường, không chỉ dựa vào tỷ lệ đúng/sai.
+  timeSpentSeconds Int @default(0)
+
   // Chấm tự động (trắc nghiệm/đúng-sai/trả lời ngắn)
   isCorrect    Boolean?
   scoreAwarded Float?
