@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GamificationService } from '../gamification/gamification.service';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 
 // Không cần cron/bảng Notification riêng: mọi thông báo được tính tại chỗ từ
@@ -7,9 +8,13 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 // cùng triết lý "lazy" đã dùng cho việc tự động chấm bài quá hạn.
 const REMINDER_AFTER_DAYS = 7;
 
+// Chuỗi từ 2 ngày trở lên mới đáng nhắc "sắp đứt" — chuỗi 1 ngày chưa có gì
+// để tiếc, nhắc sẽ chỉ gây phiền.
+const STREAK_RISK_MIN_LENGTH = 2;
+
 export interface StudentNotification {
   id: string;
-  type: 'NEW_ADVICE' | 'REMINDER';
+  type: 'NEW_ADVICE' | 'REMINDER' | 'STREAK_RISK';
   message: string;
   createdAt: Date;
   subjectId?: string;
@@ -17,7 +22,10 @@ export interface StudentNotification {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gamification: GamificationService,
+  ) {}
 
   async getMyNotifications(user: JwtPayload) {
     const student = await this.prisma.user.findUniqueOrThrow({
@@ -79,6 +87,23 @@ export class NotificationsService {
             ? `Bạn chưa ôn tập trong ${Math.floor(daysSinceLastActivity)} ngày — làm một đề để giữ phong độ nhé!`
             : 'Hãy làm bài thi đầu tiên để AI bắt đầu phân tích và đưa ra lộ trình ôn tập cho bạn.',
         createdAt: lastActivity ?? new Date(),
+      });
+    }
+
+    // Nhắc giữ chuỗi ôn tập: chỉ hiện khi hôm nay CHƯA làm bài nào (nếu không
+    // sẽ luôn hiện mỗi ngày kể cả khi đã ôn xong) và chuỗi đủ dài để đáng tiếc
+    // nếu để đứt. Không xung đột với nhắc "lâu chưa ôn tập" ở trên vì chuỗi đã
+    // về 0 khi bỏ quá REMINDER_AFTER_DAYS ngày.
+    const streak = await this.gamification.getStreak(user.sub);
+    if (
+      !streak.isActiveToday &&
+      streak.currentStreak >= STREAK_RISK_MIN_LENGTH
+    ) {
+      notifications.push({
+        id: 'streak-risk',
+        type: 'STREAK_RISK',
+        message: `🔥 Bạn đang giữ chuỗi ${streak.currentStreak} ngày ôn tập liên tiếp — làm 1 đề hôm nay để không bị đứt chuỗi nhé!`,
+        createdAt: new Date(),
       });
     }
 
