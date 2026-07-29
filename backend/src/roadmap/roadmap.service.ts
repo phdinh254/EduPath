@@ -5,9 +5,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { Prisma, RoadmapStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
+import {
+  GENERATE_ADVICE_QUEUE,
+  type GenerateAdviceJobData,
+} from './generate-advice-queue.constants';
 
 // Ngưỡng tỷ lệ đúng để coi một chuyên đề là "điểm yếu" cần ưu tiên ôn tập.
 const WEAK_TOPIC_THRESHOLD = 0.5;
@@ -22,7 +28,7 @@ interface TopicBreakdown {
   };
 }
 
-interface WeakTopic {
+export interface WeakTopic {
   topicId: string;
   correct: number;
   total: number;
@@ -62,6 +68,8 @@ export class RoadmapService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiService,
+    @InjectQueue(GENERATE_ADVICE_QUEUE)
+    private readonly generateAdviceQueue: Queue<GenerateAdviceJobData>,
   ) {}
 
   // Được gọi tự động sau khi một lượt làm bài được chấm xong hoàn toàn (GradingService).
@@ -127,17 +135,15 @@ export class RoadmapService {
       if (weakTopics.length > 0) {
         await this.upsertRoadmap(attempt.studentId, subjectId, weakTopics);
         if (this.gemini.isConfigured()) {
-          // Fire-and-forget: không chặn việc chấm điểm/tạo lộ trình (vốn phải
-          // tức thời) — lời khuyên AI sẽ xuất hiện sau vài giây khi học sinh
-          // xem lại trang lộ trình.
-          this.generateAdviceInBackground(
-            weaknessAnalysis.id,
+          // Xếp hàng qua BullMQ thay vì fire-and-forget trong-process — bền
+          // hơn (còn nguyên nếu server restart giữa chừng), có retry/backoff
+          // riêng. Không chặn việc chấm điểm/tạo lộ trình (vốn phải tức
+          // thời) — lời khuyên AI sẽ xuất hiện sau vài giây khi học sinh xem
+          // lại trang lộ trình.
+          await this.generateAdviceQueue.add('generate-advice', {
+            weaknessAnalysisId: weaknessAnalysis.id,
             weakTopics,
-          ).catch((err: unknown) =>
-            this.logger.warn(
-              `Không sinh được lời khuyên AI cho weaknessAnalysis ${weaknessAnalysis.id}: ${String(err)}`,
-            ),
-          );
+          });
         }
       }
 
@@ -279,7 +285,12 @@ export class RoadmapService {
     }));
   }
 
-  private async generateAdviceInBackground(
+  // Được GenerateAdviceProcessor gọi khi xử lý job trong hàng đợi.
+  async processGenerateAdviceJob(data: GenerateAdviceJobData): Promise<void> {
+    return this.generateAdvice(data.weaknessAnalysisId, data.weakTopics);
+  }
+
+  private async generateAdvice(
     weaknessAnalysisId: string,
     weakTopics: WeakTopic[],
   ) {

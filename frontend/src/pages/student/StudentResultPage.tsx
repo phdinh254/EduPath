@@ -107,10 +107,19 @@ export function StudentResultPage() {
         <div>
           <p className="text-sm font-medium text-indigo-100">Kết quả bài thi</p>
           <p className="text-lg font-semibold">
-            {attempt.totalScore != null ? `${attempt.totalScore.toFixed(2)} điểm` : 'Đang chấm...'}
+            {attempt.status === 'PENDING_REVIEW'
+              ? 'Đang chờ chấm'
+              : attempt.totalScore != null
+                ? `${attempt.totalScore.toFixed(2)} điểm`
+                : 'Đang chấm...'}
           </p>
           <p className="text-sm text-indigo-100">
-            {attempt.status === 'GRADED' ? 'Đã chấm xong' : 'Đang chấm...'} · {correctCount}/{review.length} câu đúng
+            {attempt.status === 'GRADED'
+              ? 'Đã chấm xong'
+              : attempt.status === 'PENDING_REVIEW'
+                ? 'Có câu tự luận cần giáo viên chấm tay — điểm sẽ công bố ngay sau khi chấm xong'
+                : 'Đang chấm...'}{' '}
+            · {correctCount}/{review.length} câu đúng
           </p>
         </div>
       </div>
@@ -177,10 +186,18 @@ function ReviewItemCard({ item, index }: { item: AttemptReviewItem; index: numbe
         </>
       ) : (
         <div className="mt-2 rounded-xl bg-amber-50 p-3 text-sm dark:bg-amber-500/10">
-          {item.aiComment && <p className="mb-1 text-slate-600 dark:text-slate-400">{item.aiComment}</p>}
-          <p className="font-medium text-amber-700 dark:text-amber-400">
-            {item.scoreAwarded ?? item.aiPreliminaryScore}/{item.maxScore} điểm — điểm tham khảo do AI đánh giá
-          </p>
+          {item.needsManualGrading ? (
+            <p className="font-medium text-amber-700 dark:text-amber-400">
+              Đang chờ giáo viên chấm bài này — điểm chưa công bố
+            </p>
+          ) : (
+            <>
+              {item.aiComment && <p className="mb-1 text-slate-600 dark:text-slate-400">{item.aiComment}</p>}
+              <p className="font-medium text-amber-700 dark:text-amber-400">
+                {item.scoreAwarded ?? item.aiPreliminaryScore}/{item.maxScore} điểm — điểm tham khảo do AI đánh giá
+              </p>
+            </>
+          )}
         </div>
       )}
     </Card>

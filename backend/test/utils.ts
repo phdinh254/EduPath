@@ -1,14 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
+// refreshToken không còn nằm trong JSON body — backend đặt thẳng vào cookie
+// HttpOnly (xem AuthController). Test nào cần refreshToken phải tự đọc
+// Set-Cookie từ response (xem extractRefreshCookie trong refresh-token.e2e-spec.ts).
 export interface TokenBody {
   accessToken: string;
-  refreshToken: string;
 }
 export interface IdBody {
   id: string;
@@ -23,6 +26,9 @@ export async function createTestApp(): Promise<INestApplication<App>> {
     imports: [AppModule],
   }).compile();
   const app = moduleFixture.createNestApplication();
+  // Khớp main.ts thật — /auth/refresh và /auth/logout đọc refreshToken từ
+  // cookie, không có middleware này thì req.cookies luôn undefined.
+  app.use(cookieParser());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
   return app;

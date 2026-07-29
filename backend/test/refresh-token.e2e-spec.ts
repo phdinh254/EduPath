@@ -3,18 +3,32 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { body, createTestApp, registerFactory, TokenBody } from './utils';
+import { body, createTestApp, TokenBody } from './utils';
+
+// refreshToken không còn trả về trong JSON body — backend đặt vào cookie
+// HttpOnly `refreshToken` (path=/auth, xem AuthController). Test ở đây phải tự
+// đọc/gửi cookie qua header Set-Cookie/Cookie thay vì field trong body JSON.
+function extractRefreshCookie(res: request.Response): string {
+  const raw = res.headers['set-cookie'] as unknown as
+    string[] | string | undefined;
+  const cookies = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const found = cookies.find((c) => c.startsWith('refreshToken='));
+  if (!found) {
+    throw new Error(
+      'Không tìm thấy cookie refreshToken trong response — kiểm tra lại AuthController',
+    );
+  }
+  return found.split(';')[0]; // "refreshToken=<jwt>"
+}
 
 describe('Refresh token (e2e)', () => {
   let app: INestApplication<App>;
-  let register: ReturnType<typeof registerFactory>;
   let jwtService: JwtService;
   let config: ConfigService;
   const suffix = Date.now();
 
   beforeAll(async () => {
     app = await createTestApp();
-    register = registerFactory(app);
     jwtService = app.get(JwtService);
     config = app.get(ConfigService);
   });
@@ -25,56 +39,70 @@ describe('Refresh token (e2e)', () => {
 
   const server = () => app.getHttpServer();
 
-  async function makeStudent(label: string) {
-    return register({
-      email: `rt_student_${label}_${suffix}@test.dev`,
-      password: 'password123',
-      fullName: `Student ${label}`,
-      role: 'STUDENT',
-    });
+  async function registerAndGetRefreshCookie(label: string): Promise<string> {
+    const res = await request(server())
+      .post('/auth/register')
+      .send({
+        email: `rt_student_${label}_${suffix}@test.dev`,
+        password: 'password123',
+        fullName: `Student ${label}`,
+      })
+      .expect(201);
+    return extractRefreshCookie(res);
   }
 
   it('1: a valid refresh token issues a new access token', async () => {
-    const { refreshToken } = await makeStudent('a');
+    const cookie = await registerAndGetRefreshCookie('a');
     const res = await request(server())
       .post('/auth/refresh')
-      .send({ refreshToken })
+      .set('Cookie', cookie)
       .expect(200);
     const tokens = body<TokenBody>(res);
     expect(tokens.accessToken).toBeDefined();
-    expect(tokens.refreshToken).toBeDefined();
+    expect(extractRefreshCookie(res)).toMatch(/^refreshToken=/);
   });
 
   it('2: the old refresh token is rejected once it has been rotated', async () => {
-    const { refreshToken } = await makeStudent('b');
+    const cookie = await registerAndGetRefreshCookie('b');
     await request(server())
       .post('/auth/refresh')
-      .send({ refreshToken })
+      .set('Cookie', cookie)
       .expect(200);
     await request(server())
       .post('/auth/refresh')
-      .send({ refreshToken })
+      .set('Cookie', cookie)
       .expect(401);
   });
 
   it('3: two refresh tokens issued within the same second still have distinct jti (and thus distinct tokens)', async () => {
-    const { refreshToken: first } = await makeStudent('c');
+    const cookie = await registerAndGetRefreshCookie('c');
     const secondRes = await request(server())
       .post('/auth/refresh')
-      .send({ refreshToken: first })
+      .set('Cookie', cookie)
       .expect(200);
-    const { refreshToken: second } = body<TokenBody>(secondRes);
-    expect(second).not.toBe(first);
+    const secondCookie = extractRefreshCookie(secondRes);
 
-    const firstPayload = jwtService.decode<{ jti?: string }>(first);
-    const secondPayload = jwtService.decode<{ jti?: string }>(second);
+    const firstToken = cookie.split('=')[1];
+    const secondToken = secondCookie.split('=')[1];
+    expect(secondToken).not.toBe(firstToken);
+
+    const firstPayload = jwtService.decode<{ jti?: string }>(firstToken);
+    const secondPayload = jwtService.decode<{ jti?: string }>(secondToken);
     expect(firstPayload.jti).toBeDefined();
     expect(secondPayload.jti).toBeDefined();
     expect(firstPayload.jti).not.toBe(secondPayload.jti);
   });
 
   it('4: an expired refresh token is rejected', async () => {
-    const { accessToken } = await makeStudent('d');
+    const res = await request(server())
+      .post('/auth/register')
+      .send({
+        email: `rt_student_d_${suffix}@test.dev`,
+        password: 'password123',
+        fullName: 'Student d',
+      })
+      .expect(201);
+    const { accessToken } = body<TokenBody>(res);
     const payload = jwtService.decode<{
       sub: string;
       email: string;
@@ -89,7 +117,7 @@ describe('Refresh token (e2e)', () => {
     );
     await request(server())
       .post('/auth/refresh')
-      .send({ refreshToken: expiredToken })
+      .set('Cookie', `refreshToken=${expiredToken}`)
       .expect(401);
   });
 
@@ -103,28 +131,28 @@ describe('Refresh token (e2e)', () => {
     );
     await request(server())
       .post('/auth/refresh')
-      .send({ refreshToken: forgedToken })
+      .set('Cookie', `refreshToken=${forgedToken}`)
       .expect(401);
   });
 
   it('6: logout revokes the exact refresh token used, and only that one', async () => {
-    const { refreshToken } = await makeStudent('e');
+    const cookie = await registerAndGetRefreshCookie('e');
     await request(server())
       .post('/auth/logout')
-      .send({ refreshToken })
+      .set('Cookie', cookie)
       .expect(200);
     await request(server())
       .post('/auth/refresh')
-      .send({ refreshToken })
+      .set('Cookie', cookie)
       .expect(401);
   });
 
   it('7: concurrent refresh calls with the same token do not both succeed (no token cloning)', async () => {
-    const { refreshToken } = await makeStudent('f');
+    const cookie = await registerAndGetRefreshCookie('f');
 
     const [resA, resB] = await Promise.all([
-      request(server()).post('/auth/refresh').send({ refreshToken }),
-      request(server()).post('/auth/refresh').send({ refreshToken }),
+      request(server()).post('/auth/refresh').set('Cookie', cookie),
+      request(server()).post('/auth/refresh').set('Cookie', cookie),
     ]);
 
     const statuses = [resA.status, resB.status].sort();

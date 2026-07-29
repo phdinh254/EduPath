@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { DifficultyLevel, QuestionType } from '@prisma/client';
@@ -23,6 +24,7 @@ export class CommitImportedQuestionItemDto {
   difficulty: DifficultyLevel;
 
   @IsString()
+  @MaxLength(5000)
   content: string;
 
   @IsOptional()
@@ -33,6 +35,7 @@ export class CommitImportedQuestionItemDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   explanation?: string;
 }
 

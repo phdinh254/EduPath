@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchPendingReview, reviewEssayAnswer } from '../../features/grading/gradingApi';
+import { fetchAiQualityStats, fetchPendingReview, reviewEssayAnswer } from '../../features/grading/gradingApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { Modal } from '../../components/Modal';
@@ -8,6 +8,53 @@ import { EmptyState, ErrorState, LoadingState } from '../../components/StateView
 import { Badge, Button, Card, PageHeader } from '../../components/ui/Card';
 import { ClipboardCheckIcon, SparklesIcon } from '../../components/ui/Icons';
 import type { PendingReviewAnswer } from '../../types/api';
+
+function AiQualityStatsPanel() {
+  const { data, isLoading, error } = useQuery({ queryKey: ['ai-quality-stats'], queryFn: fetchAiQualityStats });
+
+  if (isLoading) return <LoadingState label="Đang tính độ lệch điểm AI..." />;
+  if (error) return <ErrorState message={getApiErrorMessage(error)} />;
+  if (!data || data.sampleSize === 0) {
+    return (
+      <Card className="mb-6 p-5 text-sm text-slate-500 dark:text-slate-400">
+        Chưa đủ dữ liệu để đo độ lệch — cần ít nhất một lần ADMIN hậu kiểm/chấm tay một câu tự luận đã có điểm AI ban đầu.
+      </Card>
+    );
+  }
+
+  const withinPercent = data.withinToleranceRate != null ? Math.round(data.withinToleranceRate * 100) : null;
+
+  return (
+    <Card className="mb-6 p-5">
+      <p className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
+        Độ lệch điểm AI vs người chấm ({data.sampleSize} lượt hậu kiểm)
+      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Sai số trung bình</p>
+          <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{data.meanAbsoluteDeviation} điểm</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Sai số lớn nhất</p>
+          <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{data.maxDeviation} điểm</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Trong ngưỡng ±{data.toleranceScore}đ</p>
+          <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{withinPercent}%</p>
+        </div>
+      </div>
+      {data.byModel.length > 0 && (
+        <div className="mt-4 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+          {data.byModel.map((m) => (
+            <p key={m.model}>
+              {m.model}: sai số TB {m.meanAbsoluteDeviation} điểm ({m.sampleSize} mẫu)
+            </p>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export function AdminPendingReviewPage() {
   const queryClient = useQueryClient();
@@ -42,16 +89,26 @@ export function AdminPendingReviewPage() {
     reviewMutation.mutate();
   }
 
+  const urgentCount = data?.filter((a) => a.needsManualGrading).length ?? 0;
+
   return (
     <div>
       <PageHeader
         title="Hậu kiểm điểm Văn"
-        subtitle="AI đã chấm và công bố điểm cho học sinh — spot-check chất lượng AI và điều chỉnh nếu cần"
+        subtitle="Bài đánh dấu 'Cần chấm gấp' chưa hề công bố điểm cho học sinh — các bài còn lại AI đã chấm và công bố rồi, chỉ để spot-check chất lượng"
         icon={<ClipboardCheckIcon className="h-5 w-5" />}
       />
+
+      <AiQualityStatsPanel />
+
       {isLoading && <LoadingState />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}
       {data && data.length === 0 && <EmptyState label="Không có bài nào cần hậu kiểm." />}
+      {urgentCount > 0 && (
+        <p className="mb-4 text-sm font-medium text-red-600 dark:text-red-400">
+          {urgentCount} bài đang chờ chấm gấp — học sinh chưa thấy điểm cho tới khi được chấm.
+        </p>
+      )}
 
       <div className="space-y-4">
         {data?.map((answer) => (
@@ -64,17 +121,21 @@ export function AdminPendingReviewPage() {
                 <p className="text-xs text-slate-500">Đề bài: {answer.question.content}</p>
               </div>
               <Button onClick={() => openReview(answer)} className="shrink-0 px-3 py-1.5 text-xs">
-                Điều chỉnh điểm
+                {answer.needsManualGrading ? 'Chấm điểm' : 'Điều chỉnh điểm'}
               </Button>
             </div>
             <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-400">
               {(answer.response as { text?: string } | null)?.text ?? '(không có nội dung)'}
             </p>
             <p className="mt-2 flex items-center gap-2 text-xs">
-              <Badge variant="amber">
-                <SparklesIcon className="h-3 w-3" />
-                AI chấm: {answer.scoreAwarded ?? answer.aiPreliminaryScore} điểm
-              </Badge>
+              {answer.needsManualGrading ? (
+                <Badge variant="red">Cần chấm gấp — chưa công bố điểm</Badge>
+              ) : (
+                <Badge variant="amber">
+                  <SparklesIcon className="h-3 w-3" />
+                  AI chấm: {answer.scoreAwarded ?? answer.aiPreliminaryScore} điểm
+                </Badge>
+              )}
               <span className="text-slate-500 dark:text-slate-400">{answer.aiComment}</span>
             </p>
           </Card>

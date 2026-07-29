@@ -86,6 +86,12 @@ Hoặc chạy toàn bộ bằng một lệnh:
 cd devops && docker compose up --build
 ```
 
+Production (build tối ưu, frontend serve qua Nginx với reverse proxy `/api` — xem `frontend/nginx.conf`):
+
+```bash
+cd devops && docker compose -f docker-compose.prod.yml up -d --build
+```
+
 ### Biến môi trường chính (`backend/.env`)
 
 | Biến | Bắt buộc | Mô tả |
@@ -97,6 +103,18 @@ cd devops && docker compose up --build
 | `FRONTEND_URL` | Khi dùng Google login | URL frontend để redirect về sau khi đăng nhập Google |
 
 Xem đầy đủ tại `backend/.env.example`.
+
+## Vận hành: backup & rollback
+
+```bash
+cd devops
+./backup-postgres.sh                 # backup định kỳ, mặc định giữ 14 ngày gần nhất
+./restore-postgres.sh backups/edupath_20260729_020000.dump
+```
+
+Đặt `backup-postgres.sh` vào cron để chạy tự động (xem comment đầu file).
+Rollback migration Prisma (không có down migration tự sinh) theo từng bước
+tại [devops/MIGRATION_ROLLBACK.md](devops/MIGRATION_ROLLBACK.md).
 
 ## Kiểm thử
 
@@ -126,7 +144,6 @@ Swagger UI: `http://localhost:3000/api-docs` sau khi chạy backend.
 - Chưa có tính năng đặt lại mật khẩu thật (link "Quên mật khẩu?" hiện chỉ hiển thị thông báo tính năng đang phát triển).
 - Cấu trúc đề ĐGNL (3 phần thi, thang điểm 150) là cấu hình mặc định tham khảo — admin tự khai báo section/thang điểm khi ghép đề, chưa cố định theo đề thi thật của một đại học cụ thể.
 - Chưa rà soát pháp lý đầy đủ theo Nghị định 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân trẻ em.
-- Frontend chưa có cấu hình production serve qua Nginx với reverse proxy `/api`.
 
 ## Giấy phép
 

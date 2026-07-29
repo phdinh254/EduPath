@@ -6,6 +6,7 @@ import {
   type Profile,
   type VerifyCallback,
 } from 'passport-google-oauth20';
+import { StatelessOAuthStateStore } from '../oauth-state.store';
 
 export interface GoogleProfile {
   email: string;
@@ -17,6 +18,12 @@ export interface GoogleProfile {
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor(config: ConfigService) {
+    // state: true + store tuỳ biến (stateless) chống CSRF cho luồng OAuth —
+    // không dùng NonceStore mặc định của passport-oauth2 vì nó cần
+    // express-session, trong khi app này thuần JWT không có session.
+    const stateSecret =
+      config.get<string>('GOOGLE_CLIENT_SECRET') ||
+      config.getOrThrow<string>('JWT_ACCESS_SECRET');
     super({
       clientID: config.get<string>('GOOGLE_CLIENT_ID') || 'unconfigured',
       clientSecret:
@@ -25,6 +32,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         config.get<string>('GOOGLE_CALLBACK_URL') ||
         'http://localhost:3000/auth/google/callback',
       scope: ['email', 'profile'],
+      state: true,
+      store: new StatelessOAuthStateStore(stateSecret),
     });
   }
 

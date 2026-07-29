@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthContext';
+import { exchangeOAuthCodeRequest } from '../../features/auth/authApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { ErrorState, LoadingState } from '../../components/StateViews';
 
 // Đích đến sau khi backend redirect về từ Google OAuth (xem AuthController.googleCallback),
-// kèm accessToken/refreshToken qua query string.
+// kèm một mã dùng một lần (không phải token thật — tránh lộ token qua query
+// string/lịch sử trình duyệt) — đổi mã lấy accessToken thật qua POST
+// /auth/oauth/exchange, refreshToken được backend đặt thẳng vào cookie HttpOnly.
 export function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const { loginWithTokens } = useAuth();
@@ -17,13 +20,13 @@ export function AuthCallbackPage() {
     if (hasRun.current) return;
     hasRun.current = true;
 
-    const accessToken = searchParams.get('accessToken');
-    const refreshToken = searchParams.get('refreshToken');
-    if (!accessToken || !refreshToken) {
-      setError('Thiếu thông tin đăng nhập trả về từ Google.');
+    const code = searchParams.get('code');
+    if (!code) {
+      setError('Thiếu mã đăng nhập trả về từ Google.');
       return;
     }
-    loginWithTokens({ accessToken, refreshToken })
+    exchangeOAuthCodeRequest(code)
+      .then((tokens) => loginWithTokens(tokens))
       .then((profile) => {
         navigate(profile.role === 'ADMIN' ? '/admin' : '/student', { replace: true });
       })

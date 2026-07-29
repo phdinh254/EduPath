@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -16,6 +17,7 @@ import { AddExamQuestionDto } from './dto/add-exam-question.dto';
 import { GenerateExamDto } from './dto/generate-exam.dto';
 import { GenerateTopicPracticeDto } from './dto/generate-topic-practice.dto';
 import { SaveAnswerDto } from './dto/save-answer.dto';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 
 @ApiTags('exams')
 @ApiBearerAuth()
@@ -68,12 +70,31 @@ export class ExamsController {
     description:
       'Mọi vai trò đã đăng nhập. Học sinh tự chọn đề để thi thử/ôn tập — mọi đề đều mở, không còn giới hạn theo lớp học. Kèm attemptCount/avgScore/likeCount/liked để hiển thị dạng thẻ khám phá đề.',
   })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Mặc định 1',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Mặc định 20, tối đa 100',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách đề thi kèm số liệu khám phá.',
+    description: 'Danh sách đề thi có phân trang, kèm số liệu khám phá.',
   })
-  findAll(@CurrentUser() user: JwtPayload) {
-    return this.examsService.findAllForUser(user);
+  findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query() pagination: PaginationQueryDto,
+  ) {
+    return this.examsService.findAllForUser(
+      user,
+      pagination.page,
+      pagination.limit,
+    );
   }
 
   @Roles(Role.STUDENT)
@@ -109,13 +130,41 @@ export class ExamsController {
   @Get(':id')
   @ApiOperation({
     summary: 'Chi tiết một đề thi',
-    description: 'Mọi vai trò đã đăng nhập.',
+    description:
+      'Mọi vai trò đã đăng nhập. Học sinh chỉ xem được đề công khai đã publish hoặc đề luyện tập của chính mình.',
   })
   @ApiParam({ name: 'id', description: 'ID đề thi' })
   @ApiResponse({ status: 200, description: 'Thông tin đề thi.' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy đề thi.' })
-  findOne(@Param('id') id: string) {
-    return this.examsService.findOne(id);
+  findOne(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.examsService.findOne(id, user);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post(':id/publish')
+  @ApiOperation({
+    summary: 'Công bố đề thủ công cho học sinh',
+    description:
+      'Chỉ ADMIN. Đề tạo bằng POST /exams (thủ công) bắt đầu ở DRAFT — gọi endpoint này sau khi đã thêm đủ câu hỏi để học sinh bắt đầu thấy đề.',
+  })
+  @ApiParam({ name: 'id', description: 'ID đề thi' })
+  @ApiResponse({ status: 201, description: 'Đề đã chuyển sang PUBLISHED.' })
+  @ApiResponse({ status: 400, description: 'Đề chưa có câu hỏi nào.' })
+  publish(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.examsService.publish(id, user);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post(':id/archive')
+  @ApiOperation({
+    summary: 'Rút đề khỏi danh sách khám phá',
+    description:
+      'Chỉ ADMIN. Lịch sử làm bài cũ của đề vẫn được giữ nguyên, chỉ ẩn khỏi danh sách khám phá đề mới.',
+  })
+  @ApiParam({ name: 'id', description: 'ID đề thi' })
+  @ApiResponse({ status: 201, description: 'Đề đã chuyển sang ARCHIVED.' })
+  archive(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.examsService.archive(id, user);
   }
 
   @Roles(Role.ADMIN)

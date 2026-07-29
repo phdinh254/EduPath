@@ -9,6 +9,7 @@ import {
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AdminService } from './admin.service';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -35,29 +36,26 @@ export class AdminController {
   @Get('audit-logs')
   @ApiOperation({
     summary: 'Nhật ký hoạt động hệ thống',
-    description: 'Chỉ ADMIN. Phân trang bằng skip/take.',
+    description: 'Chỉ ADMIN. Phân trang bằng page/limit.',
   })
   @ApiQuery({
-    name: 'skip',
+    name: 'page',
     required: false,
     type: Number,
-    description: 'Mặc định 0',
+    description: 'Mặc định 1',
   })
   @ApiQuery({
-    name: 'take',
+    name: 'limit',
     required: false,
     type: Number,
-    description: 'Mặc định 50',
+    description: 'Mặc định 20, tối đa 100',
   })
   @ApiResponse({
     status: 200,
-    description: 'Danh sách audit log, mới nhất trước.',
+    description: 'Danh sách audit log có phân trang, mới nhất trước.',
   })
   @ApiResponse({ status: 403, description: 'Không phải ADMIN.' })
-  findAuditLogs(@Query('skip') skip?: string, @Query('take') take?: string) {
-    return this.adminService.findAuditLogs(
-      skip ? Number(skip) : undefined,
-      take ? Number(take) : undefined,
-    );
+  findAuditLogs(@Query() pagination: PaginationQueryDto) {
+    return this.adminService.findAuditLogs(pagination.page, pagination.limit);
   }
 }

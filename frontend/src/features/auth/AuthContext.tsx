@@ -1,10 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { setUnauthorizedHandler } from '../../lib/api-client';
+import { setAccessToken, setUnauthorizedHandler } from '../../lib/api-client';
 import type { AuthTokens, UserProfile } from '../../types/api';
 import {
   fetchMe,
   loginRequest,
   logoutRequest,
+  refreshRequest,
   registerRequest,
   type LoginPayload,
   type RegisterPayload,
@@ -27,40 +28,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const logout = useCallback(() => {
-    const storedRefreshToken = localStorage.getItem('refreshToken');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+    setAccessToken(null);
     setUser(null);
-    // Thu hồi refresh token phía server, không cần chờ kết quả (best-effort).
-    if (storedRefreshToken) {
-      logoutRequest(storedRefreshToken).catch(() => {});
-    }
+    // Thu hồi refresh token phía server (cookie HttpOnly), không cần chờ kết quả (best-effort).
+    logoutRequest().catch(() => {});
   }, []);
 
   useEffect(() => {
     setUnauthorizedHandler(logout);
   }, [logout]);
 
+  // accessToken chỉ sống trong bộ nhớ (xem api-client.ts) nên mất khi tải lại
+  // trang — phục hồi phiên đăng nhập bằng cách gọi /auth/refresh, dựa vào
+  // cookie refreshToken HttpOnly mà trình duyệt tự gửi kèm.
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
-    fetchMe()
-      .then(setUser)
+    refreshRequest()
+      .then(async (tokens) => {
+        setAccessToken(tokens.accessToken);
+        setUser(await fetchMe());
+      })
       .catch(() => {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        setAccessToken(null);
       })
       .finally(() => setIsLoading(false));
   }, []);
 
-  // Lưu token rồi tải hồ sơ — dùng chung cho login bằng mật khẩu, đăng ký,
-  // và luồng quay về từ Google OAuth (token đã cấp sẵn qua query string).
+  // Lưu accessToken rồi tải hồ sơ — dùng chung cho login bằng mật khẩu, đăng
+  // ký, và luồng đổi mã dùng một lần sau khi quay về từ Google OAuth (xem
+  // AuthCallbackPage). refreshToken không đi qua đây — backend đã đặt vào
+  // cookie HttpOnly trực tiếp trong response của các request phát sinh tokens.
   const applyTokens = useCallback(async (tokens: AuthTokens) => {
-    localStorage.setItem('accessToken', tokens.accessToken);
-    localStorage.setItem('refreshToken', tokens.refreshToken);
+    setAccessToken(tokens.accessToken);
     const profile = await fetchMe();
     setUser(profile);
     return profile;

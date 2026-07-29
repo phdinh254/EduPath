@@ -75,19 +75,35 @@ export function gradeShortAnswer(
   return { isCorrect, scoreAwarded: isCorrect ? maxScore : 0 };
 }
 
-// Placeholder cho chấm tự luận bằng AI — thay bằng lời gọi LLM API thật khi tích hợp.
-// AI chỉ được đưa nhận xét sơ bộ dựa trên nội dung học sinh nộp, không tự bịa nội dung ngoài phạm vi bài làm.
-export function gradeEssayPlaceholder(
+export type EssayFallbackReason = 'GEMINI_NOT_CONFIGURED' | 'GEMINI_ERROR';
+
+export type EssayGradeOutcome =
+  | { status: 'GRADED'; score: number; comment: string }
+  | { status: 'PENDING_REVIEW'; reason: EssayFallbackReason; comment: string };
+
+// Khi Gemini không khả dụng (chưa cấu hình hoặc gọi lỗi), TUYỆT ĐỐI không tự
+// chấm điểm tự luận theo số từ/độ dài — số từ không phản ánh chất lượng nội
+// dung học thuật thật. Chỉ ngoại lệ: bài trắng (không nộp gì) là 0 điểm hiển
+// nhiên, không cần con người xác nhận. Mọi bài có nội dung phải chờ ADMIN
+// chấm tay (Answer.needsManualGrading — xem GradingService.reviewEssay).
+export function gradeEssayFallback(
   response: unknown,
-  maxScore: number,
-): { score: number; comment: string } {
-  const text = String((response as { text?: string } | null)?.text ?? '');
-  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
-  const score =
-    wordCount === 0 ? 0 : Math.min(maxScore, (wordCount / 200) * maxScore);
-  const comment =
-    wordCount === 0
-      ? 'Học sinh chưa nộp bài viết.'
-      : `Nhận xét sơ bộ do AI đánh giá dựa trên độ dài và cấu trúc bài viết (${wordCount} từ). Cần giáo viên xem lại nội dung chi tiết.`;
-  return { score, comment };
+  reason: EssayFallbackReason,
+): EssayGradeOutcome {
+  const text = String(
+    (response as { text?: string } | null)?.text ?? '',
+  ).trim();
+  if (!text) {
+    return {
+      status: 'GRADED',
+      score: 0,
+      comment: 'Học sinh chưa nộp bài viết.',
+    };
+  }
+  return {
+    status: 'PENDING_REVIEW',
+    reason,
+    comment:
+      'AI hiện chưa chấm được nội dung bài này — đang chờ ADMIN chấm tay, điểm sẽ được công bố sau.',
+  };
 }

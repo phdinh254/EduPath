@@ -1,0 +1,81 @@
+# Compose profile dành cho production — khác docker-compose.yml (dev) ở 3 điểm:
+# 1) build target "production" cho cả backend/frontend thay vì "dev" (không mount
+#    source code, không hot-reload).
+# 2) Chỉ Nginx (frontend) mở cổng ra ngoài — backend/postgres chỉ giao tiếp qua
+#    mạng nội bộ Compose, giảm bề mặt tấn công.
+# 3) Frontend Nginx tự reverse-proxy /api sang backend (xem frontend/nginx.conf)
+#    nên KHÔNG cần VITE_DEV_PROXY_TARGET (đó là biến chỉ dùng cho Vite dev server).
+#
+# Chạy: docker compose -f devops/docker-compose.prod.yml up -d --build
+# Yêu cầu: backend/.env đã điền đủ secret thật (JWT_*, GEMINI_API_KEY nếu cần...)
+# và NODE_ENV=production để bật cookie Secure + tắt Swagger (xem backend/src/main.ts).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: edupath
+      POSTGRES_PASSWORD: edupath
+      POSTGRES_DB: edupath
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edupath"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../backend
+      target: production
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql://edupath:edupath@postgres:5432/edupath?schema=public
+      REDIS_HOST: redis
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000/', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ../frontend
+      target: production
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -5,14 +5,30 @@ interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
+// Access token chỉ giữ trong bộ nhớ (biến module), KHÔNG lưu localStorage —
+// mất khi tải lại trang, AuthProvider tự phục hồi bằng /auth/refresh (dựa
+// vào cookie refreshToken HttpOnly, không cần đọc lại token cũ). Mục tiêu:
+// một lỗ hổng XSS ở bất kỳ đâu trong SPA không thể đọc trộm token từ storage.
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  // Cần thiết để trình duyệt gửi kèm cookie refreshToken HttpOnly tới
+  // /auth/refresh và /auth/logout kể cả khi frontend/backend khác origin.
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
   }
   return config;
 });
@@ -27,16 +43,14 @@ export function setUnauthorizedHandler(handler: () => void) {
 let refreshPromise: Promise<string> | null = null;
 
 async function refreshAccessToken(): Promise<string> {
-  const storedRefreshToken = localStorage.getItem('refreshToken');
-  if (!storedRefreshToken) {
-    throw new Error('Không có refresh token');
-  }
+  // Không gửi refreshToken trong body — cookie HttpOnly được trình duyệt tự
+  // đính kèm, xem AuthController.refresh().
   const { data } = await axios.post<AuthTokens>(
     `${apiClient.defaults.baseURL}/auth/refresh`,
-    { refreshToken: storedRefreshToken },
+    {},
+    { withCredentials: true },
   );
-  localStorage.setItem('accessToken', data.accessToken);
-  localStorage.setItem('refreshToken', data.refreshToken);
+  setAccessToken(data.accessToken);
   return data.accessToken;
 }
 

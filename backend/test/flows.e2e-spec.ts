@@ -202,7 +202,7 @@ describe('Core flows (e2e)', () => {
       .expect(403);
   });
 
-  it('6-7: essay is AI-graded and published instantly; ADMIN can still adjust it after the fact', async () => {
+  it('6-7: essay with content held as PENDING_REVIEW when Gemini is not configured; ADMIN grades it manually', async () => {
     const { accessToken: adminToken } = await makeAdmin(
       `admin6_${suffix}@test.dev`,
     );
@@ -267,14 +267,17 @@ describe('Core flows (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(201);
     const submitted = body<AttemptBody>(submittedRes);
-    expect(submitted.status).toBe('GRADED');
-    const aiGradedAnswer = submitted.answers[0];
-    expect(aiGradedAnswer.isAiReferenceOnly).toBe(true);
-    expect(aiGradedAnswer.scoreAwarded).not.toBeNull();
+    // Bài có nội dung nhưng GEMINI_API_KEY không cấu hình trong môi trường
+    // test — không tự chấm theo số từ, chờ ADMIN chấm tay (xem P0 issue #1).
+    expect(submitted.status).toBe('PENDING_REVIEW');
+    const pendingAnswer = submitted.answers[0];
+    expect(pendingAnswer.isAiReferenceOnly).toBe(false);
+    expect(pendingAnswer.scoreAwarded).toBeNull();
 
-    // ADMIN vẫn điều chỉnh lại được điểm AI đã công bố (hậu kiểm).
+    // ADMIN chấm tay lần đầu — đây là câu tự luận duy nhất nên attempt tự
+    // chuyển GRADED ngay khi chấm xong.
     const reviewedRes = await request(server())
-      .post(`/grading/answers/${aiGradedAnswer.id}/review`)
+      .post(`/grading/answers/${pendingAnswer.id}/review`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ finalScore: 2.5, comment: 'Khá tốt' })
       .expect(201);
@@ -284,7 +287,7 @@ describe('Core flows (e2e)', () => {
 
     // Học sinh không phải ADMIN không được tự duyệt lại điểm của mình.
     await request(server())
-      .post(`/grading/answers/${aiGradedAnswer.id}/review`)
+      .post(`/grading/answers/${pendingAnswer.id}/review`)
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ finalScore: 3 })
       .expect(403);

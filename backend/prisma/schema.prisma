@@ -54,6 +54,10 @@ enum QuestionSource {
 enum AttemptStatus {
   IN_PROGRESS
   SUBMITTED
+  // Đã nộp, nhưng có ít nhất 1 câu tự luận chưa được AI thật chấm nội dung
+  // (Gemini lỗi/chưa cấu hình) — điểm CHƯA công bố, chờ ADMIN chấm tay qua
+  // GradingService.reviewEssay trước khi chuyển sang GRADED.
+  PENDING_REVIEW
   GRADED
 }
 
@@ -68,6 +72,31 @@ enum ExamCategory {
   DGNL // Đánh giá năng lực — nhiều môn/section trong 1 đề, thang điểm 150
 }
 
+// PUBLIC: mọi học sinh đều thấy trong danh sách khám phá đề.
+// PRIVATE: chỉ chính người tạo (createdById) thấy được — dùng cho đề luyện
+// tập cá nhân do học sinh tự sinh, không được lẫn vào kho đề chung.
+enum ExamVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+// DRAFT: ADMIN đang soạn thủ công (create()), chưa đủ câu hỏi, chưa hiện với
+// học sinh dù visibility=PUBLIC. PUBLISHED: sẵn sàng, hiện với học sinh.
+// ARCHIVED: đã rút khỏi danh sách khám phá nhưng lịch sử làm bài cũ vẫn giữ.
+enum ExamPublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// OFFICIAL: đề chính thức của hệ thống (ADMIN tạo/ghép). PERSONAL_PRACTICE:
+// đề học sinh tự sinh nhanh để luyện một chuyên đề (generateTopicPractice) —
+// luôn đi kèm visibility=PRIVATE.
+enum ExamPurpose {
+  OFFICIAL
+  PERSONAL_PRACTICE
+}
+
 // ---------- Core: User ----------
 
 model User {
@@ -78,6 +107,12 @@ model User {
   role         Role
   dateOfBirth  DateTime?
   isActive     Boolean   @default(true)
+
+  // Chống dò mật khẩu (brute-force) — tăng mỗi lần đăng nhập sai, reset về 0
+  // khi đăng nhập đúng. Đạt ngưỡng (xem AuthService.MAX_FAILED_ATTEMPTS) thì
+  // khoá tạm thời qua lockedUntil thay vì khoá vĩnh viễn.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
 
   // Mốc thời gian học sinh xem thông báo lần gần nhất — dùng để tính thông
   // báo "lời khuyên AI mới" nào là mới so với lần xem trước, không cần bảng
@@ -230,6 +265,12 @@ model Question {
   // (seed-question-bank.ts) là tự biên soạn thủ công, không phải AI sinh.
   source QuestionSource @default(ADMIN_MANUAL)
 
+  // Chỉ có giá trị khi source=AI_GENERATED — model thực sự sinh nội dung này
+  // (vd. "gemini-flash-latest", hoặc "RULE_BASED_TEMPLATE" khi Gemini không
+  // khả dụng lúc sinh) và phiên bản prompt, để truy vết/đánh giá chất lượng.
+  generationModel        String?
+  generationPromptVersion String?
+
   examQuestions ExamQuestion[]
   answers       Answer[]
 
@@ -255,6 +296,10 @@ model Exam {
   createdBy       User    @relation("ExamCreatedBy", fields: [createdById], references: [id])
   durationMinutes Int
 
+  visibility ExamVisibility    @default(PUBLIC)
+  status     ExamPublishStatus @default(PUBLISHED)
+  purpose    ExamPurpose       @default(OFFICIAL)
+
   sections      ExamSection[]
   examQuestions ExamQuestion[]
   attempts      ExamAttempt[]
@@ -264,6 +309,7 @@ model Exam {
   updatedAt DateTime @updatedAt
 
   @@index([subjectId])
+  @@index([visibility, status])
 }
 
 // Học sinh "thích" một đề thi — dùng để hiển thị lượt thích khi khám phá đề,
@@ -360,6 +406,21 @@ model Answer {
   aiPreliminaryScore Float?
   aiComment          String?
   isAiReferenceOnly  Boolean @default(false)
+
+  // Câu tự luận mà Gemini không chấm được nội dung thật (chưa cấu hình hoặc
+  // lỗi) — scoreAwarded/aiPreliminaryScore để null, KHÔNG công bố điểm, chờ
+  // ADMIN chấm tay qua ScoreOverride. Xem GradingService.gradeEssay.
+  needsManualGrading Boolean @default(false)
+  // Lý do rơi về chấm thủ công: GEMINI_NOT_CONFIGURED | GEMINI_ERROR
+  fallbackReason String?
+  // Model Gemini thực sự dùng để chấm câu này (vd. "gemini-flash-latest"),
+  // null nếu chấm bằng rule-based (trắc nghiệm) hoặc đang chờ chấm tay.
+  gradingModel String?
+  // Phiên bản prompt chấm tự luận — tăng mỗi khi sửa nội dung prompt để có
+  // thể truy vết điểm cũ được chấm bằng bản prompt nào.
+  gradingPromptVersion String?
+  // Thời điểm câu này thực sự được chấm xong (AI thành công hoặc ADMIN chấm tay).
+  gradedAt DateTime?
 
   // Giải thích AI cho câu trắc nghiệm/đúng-sai/trả lời ngắn bị sai — sinh và
   // lưu (cache) lần đầu học sinh yêu cầu, không tính sẵn lúc chấm để không

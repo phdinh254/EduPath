@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ContentStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { toPaginatedResult, toSkipTake } from '../common/pagination.util';
 
 @Injectable()
 export class AdminService {
@@ -40,12 +41,24 @@ export class AdminService {
     };
   }
 
-  findAuditLogs(skip = 0, take = 50) {
-    return this.prisma.auditLog.findMany({
+  async findAuditLogs(page?: number, limit?: number) {
+    const {
       skip,
       take,
-      include: { user: { select: { id: true, fullName: true, email: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+      page: safePage,
+      limit: safeLimit,
+    } = toSkipTake(page, limit);
+    const [data, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        skip,
+        take,
+        include: {
+          user: { select: { id: true, fullName: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.auditLog.count(),
+    ]);
+    return toPaginatedResult(data, total, safePage, safeLimit);
   }
 }

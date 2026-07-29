@@ -4,9 +4,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../test/renderWithProviders';
 import { AdminQuestionsPage } from './AdminQuestionsPage';
 import * as questionsApi from '../../features/questions/questionsApi';
-import type { Question } from '../../types/api';
+import type { PaginatedResult, Question } from '../../types/api';
 
 vi.mock('../../features/questions/questionsApi');
+
+function page(data: Question[]): PaginatedResult<Question> {
+  return { data, total: data.length, page: 1, limit: 20 };
+}
 
 const pendingQuestion: Question = {
   id: 'q-1',
@@ -28,15 +32,15 @@ const pendingQuestion: Question = {
 
 describe('AdminQuestionsPage', () => {
   it('defaults to the "pending approval" tab and lists questions awaiting review', async () => {
-    vi.mocked(questionsApi.fetchQuestions).mockResolvedValue([pendingQuestion]);
+    vi.mocked(questionsApi.fetchQuestions).mockResolvedValue(page([pendingQuestion]));
     renderWithProviders(<AdminQuestionsPage />);
 
     expect(await screen.findByText('Đạo hàm của x^2 là?')).toBeInTheDocument();
-    expect(questionsApi.fetchQuestions).toHaveBeenCalledWith('PENDING_APPROVAL');
+    expect(questionsApi.fetchQuestions).toHaveBeenCalledWith('PENDING_APPROVAL', 1, 20);
   });
 
   it('shows an empty state when there is nothing to review', async () => {
-    vi.mocked(questionsApi.fetchQuestions).mockResolvedValue([]);
+    vi.mocked(questionsApi.fetchQuestions).mockResolvedValue(page([]));
     renderWithProviders(<AdminQuestionsPage />);
 
     expect(await screen.findByText('Không có câu hỏi nào ở trạng thái này.')).toBeInTheDocument();
@@ -44,7 +48,7 @@ describe('AdminQuestionsPage', () => {
 
   it('approves a pending question, moving it into the shared bank', async () => {
     const user = userEvent.setup();
-    vi.mocked(questionsApi.fetchQuestions).mockResolvedValue([pendingQuestion]);
+    vi.mocked(questionsApi.fetchQuestions).mockResolvedValue(page([pendingQuestion]));
     vi.mocked(questionsApi.approveQuestion).mockResolvedValue({
       ...pendingQuestion,
       status: 'APPROVED',
@@ -62,7 +66,7 @@ describe('AdminQuestionsPage', () => {
 
   it('rejects a question with the entered reason', async () => {
     const user = userEvent.setup();
-    vi.mocked(questionsApi.fetchQuestions).mockResolvedValue([pendingQuestion]);
+    vi.mocked(questionsApi.fetchQuestions).mockResolvedValue(page([pendingQuestion]));
     vi.mocked(questionsApi.rejectQuestion).mockResolvedValue({
       ...pendingQuestion,
       status: 'REJECTED',

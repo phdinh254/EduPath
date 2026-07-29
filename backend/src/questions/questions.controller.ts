@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -17,6 +18,7 @@ import { RejectQuestionDto } from './dto/reject-question.dto';
 import { GenerateQuestionsDto } from './dto/generate-questions.dto';
 import { ParseExamImportDto } from './dto/parse-exam-import.dto';
 import { CommitImportedQuestionsDto } from './dto/commit-imported-questions.dto';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 
 // Giáo viên không còn tự soạn câu hỏi — toàn bộ ngân hàng câu hỏi do ADMIN
 // tạo thủ công hoặc do AI tự sinh (xem POST /questions/generate và luồng ghép
@@ -40,6 +42,7 @@ export class QuestionsController {
     return this.questionsService.create(user, dto);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('generate')
   @ApiOperation({
     summary: 'AI sinh một lô câu hỏi mới',
@@ -54,6 +57,7 @@ export class QuestionsController {
     return this.questionsService.generateBatch(user, dto);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('import/parse')
   @ApiOperation({
     summary: 'Tách câu hỏi từ văn bản đề thi thật (bản nháp)',
@@ -88,9 +92,28 @@ export class QuestionsController {
     description: 'Chỉ ADMIN. Có thể lọc theo trạng thái.',
   })
   @ApiQuery({ name: 'status', enum: ContentStatus, required: false })
-  @ApiResponse({ status: 200, description: 'Danh sách câu hỏi.' })
-  findAll(@Query('status') status?: ContentStatus) {
-    return this.questionsService.findAll(status);
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Mặc định 1',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Mặc định 20, tối đa 100',
+  })
+  @ApiResponse({ status: 200, description: 'Danh sách câu hỏi có phân trang.' })
+  findAll(
+    @Query('status') status: ContentStatus | undefined,
+    @Query() pagination: PaginationQueryDto,
+  ) {
+    return this.questionsService.findAll(
+      status,
+      pagination.page,
+      pagination.limit,
+    );
   }
 
   @Get(':id')

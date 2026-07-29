@@ -1,8 +1,16 @@
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { ExamCategory } from '@prisma/client';
 
 export class CreateExamDto {
   @IsString()
+  @MaxLength(200)
   title: string;
 
   @IsOptional()

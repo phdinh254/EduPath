@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
+import { toPaginatedResult, toSkipTake } from '../common/pagination.util';
 
 @Injectable()
 export class UsersService {
@@ -46,19 +47,32 @@ export class UsersService {
     return user;
   }
 
-  findAll(role?: Role) {
-    return this.prisma.user.findMany({
-      where: role ? { role } : undefined,
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(role?: Role, page?: number, limit?: number) {
+    const where = role ? { role } : undefined;
+    const {
+      skip,
+      take,
+      page: safePage,
+      limit: safeLimit,
+    } = toSkipTake(page, limit);
+    const [data, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return toPaginatedResult(data, total, safePage, safeLimit);
   }
 
   async setActive(id: string, isActive: boolean) {

@@ -7,10 +7,17 @@ import { UsersModule } from '../users/users.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GoogleConfiguredGuard } from './guards/google-configured.guard';
+import { OAuthExchangeService } from './oauth-exchange.service';
 
 @Module({
   imports: [UsersModule, PassportModule, JwtModule.register({})],
-  providers: [AuthService, JwtStrategy, GoogleStrategy, GoogleConfiguredGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleStrategy,
+    GoogleConfiguredGuard,
+    OAuthExchangeService,
+  ],
   controllers: [AuthController],
 })
 export class AuthModule {}

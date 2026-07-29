@@ -1,5 +1,11 @@
 import { apiClient } from '../../lib/api-client';
-import type { ContentStatus, DifficultyLevel, Question, QuestionType } from '../../types/api';
+import type {
+  ContentStatus,
+  DifficultyLevel,
+  PaginatedResult,
+  Question,
+  QuestionType,
+} from '../../types/api';
 
 export interface CreateQuestionPayload {
   subjectId: string;
@@ -20,8 +26,14 @@ export interface GenerateQuestionsPayload {
   count: number;
 }
 
-export async function fetchQuestions(status?: ContentStatus): Promise<Question[]> {
-  const { data } = await apiClient.get<Question[]>('/questions', { params: status ? { status } : undefined });
+export async function fetchQuestions(
+  status?: ContentStatus,
+  page = 1,
+  limit = 100,
+): Promise<PaginatedResult<Question>> {
+  const { data } = await apiClient.get<PaginatedResult<Question>>('/questions', {
+    params: { status, page, limit },
+  });
   return data;
 }
 

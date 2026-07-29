@@ -3,12 +3,27 @@ export type Role = 'STUDENT' | 'ADMIN';
 export type QuestionType = 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'ESSAY';
 export type DifficultyLevel = 'KNOWLEDGE' | 'COMPREHENSION' | 'APPLICATION' | 'HIGH_APPLICATION';
 export type ContentStatus = 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
-export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED' | 'GRADED';
+// PENDING_REVIEW: đã nộp nhưng còn câu tự luận Gemini chưa chấm được nội
+// dung (lỗi/chưa cấu hình) — điểm CHƯA công bố, chờ ADMIN chấm tay.
+export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED' | 'PENDING_REVIEW' | 'GRADED';
 export type ExamCategory = 'THPT' | 'DGNL';
+export type ExamVisibility = 'PUBLIC' | 'PRIVATE';
+export type ExamPublishStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type ExamPurpose = 'OFFICIAL' | 'PERSONAL_PRACTICE';
 
+// Envelope chung cho mọi endpoint danh sách có phân trang (đề thi, câu hỏi,
+// người dùng, audit log) — xem backend/src/common/pagination.util.ts.
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+// refreshToken không còn nằm trong response JSON — backend đặt thẳng vào
+// cookie HttpOnly (xem AuthController), frontend không đọc/lưu được nó.
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
 }
 
 export interface UserProfile {
@@ -97,6 +112,9 @@ export interface Exam {
   subjectId: string | null;
   createdById: string;
   durationMinutes: number;
+  visibility: ExamVisibility;
+  status: ExamPublishStatus;
+  purpose: ExamPurpose;
   createdAt: string;
   updatedAt: string;
   sections?: ExamSection[];
@@ -137,6 +155,12 @@ export interface Answer {
   aiPreliminaryScore: number | null;
   aiComment: string | null;
   isAiReferenceOnly: boolean;
+  // Chỉ có giá trị với câu tự luận — xem grading.utils.ts (backend).
+  needsManualGrading: boolean;
+  fallbackReason: 'GEMINI_NOT_CONFIGURED' | 'GEMINI_ERROR' | null;
+  gradingModel: string | null;
+  gradingPromptVersion: string | null;
+  gradedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -191,6 +215,8 @@ export interface AttemptReviewItem {
   aiComment: string | null;
   isAiReferenceOnly: boolean;
   aiExplanation: string | null;
+  needsManualGrading: boolean;
+  fallbackReason: 'GEMINI_NOT_CONFIGURED' | 'GEMINI_ERROR' | null;
 }
 
 export interface WeaknessAnalysis {
@@ -223,6 +249,15 @@ export interface StudyRoadmap {
 export interface PendingReviewAnswer extends Answer {
   question: { id: string; content: string };
   attempt: ExamAttempt & { student: { id: string; fullName: string; email: string }; exam: { id: string; title: string } };
+}
+
+export interface AiGradingDeviationStats {
+  sampleSize: number;
+  toleranceScore: number;
+  meanAbsoluteDeviation: number | null;
+  maxDeviation: number | null;
+  withinToleranceRate: number | null;
+  byModel: { model: string; sampleSize: number; meanAbsoluteDeviation: number }[];
 }
 
 export interface AdminStats {

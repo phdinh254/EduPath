@@ -8,6 +8,9 @@ import {
   AttemptStatus,
   ContentStatus,
   ExamCategory,
+  ExamPublishStatus,
+  ExamPurpose,
+  ExamVisibility,
   Prisma,
   QuestionType,
   Role,
@@ -20,6 +23,7 @@ import { CreateExamDto } from './dto/create-exam.dto';
 import { AddExamQuestionDto } from './dto/add-exam-question.dto';
 import { GenerateExamDto } from './dto/generate-exam.dto';
 import { GenerateTopicPracticeDto } from './dto/generate-topic-practice.dto';
+import { toPaginatedResult, toSkipTake } from '../common/pagination.util';
 
 const EXAM_DETAIL_INCLUDE = {
   sections: { orderBy: { order: 'asc' as const } },
@@ -40,7 +44,8 @@ export class ExamsService {
   ) {}
 
   // Tạo đề thủ công — chỉ ADMIN dùng (xem generateExam() cho luồng AI ghép đề
-  // tự động, vốn là luồng chính).
+  // tự động, vốn là luồng chính). Luôn bắt đầu ở DRAFT: đề trống chưa có câu
+  // hỏi nào không được hiện với học sinh cho tới khi ADMIN gọi publish().
   async create(user: JwtPayload, dto: CreateExamDto) {
     const category = dto.category ?? ExamCategory.THPT;
     if (category === ExamCategory.THPT && !dto.subjectId) {
@@ -53,8 +58,68 @@ export class ExamsService {
         subjectId: dto.subjectId,
         durationMinutes: dto.durationMinutes,
         createdById: user.sub,
+        visibility: ExamVisibility.PUBLIC,
+        status: ExamPublishStatus.DRAFT,
+        purpose: ExamPurpose.OFFICIAL,
       },
     });
+  }
+
+  // ADMIN xác nhận đề thủ công (create()) đã đủ câu hỏi và sẵn sàng cho học
+  // sinh — tách khỏi create() vì lúc tạo đề luôn chưa có câu hỏi nào.
+  async publish(examId: string, user: JwtPayload) {
+    this.assertAdminOnly(user);
+    const exam = await this.findExamOrThrow(examId);
+    if (exam.purpose !== ExamPurpose.OFFICIAL) {
+      throw new BadRequestException(
+        'Chỉ đề chính thức mới cần thao tác publish — đề luyện cá nhân tự sẵn sàng ngay khi tạo',
+      );
+    }
+    const questionCount = await this.prisma.examQuestion.count({
+      where: { examId },
+    });
+    if (questionCount === 0) {
+      throw new BadRequestException(
+        'Đề chưa có câu hỏi nào — thêm câu hỏi trước khi publish',
+      );
+    }
+    return this.prisma.exam.update({
+      where: { id: examId },
+      data: { status: ExamPublishStatus.PUBLISHED },
+    });
+  }
+
+  // Rút đề khỏi danh sách khám phá của học sinh — lịch sử làm bài cũ (nếu có)
+  // vẫn giữ nguyên vì ExamAttempt tham chiếu examId, không xoá đề.
+  async archive(examId: string, user: JwtPayload) {
+    this.assertAdminOnly(user);
+    await this.findExamOrThrow(examId);
+    return this.prisma.exam.update({
+      where: { id: examId },
+      data: { status: ExamPublishStatus.ARCHIVED },
+    });
+  }
+
+  // STUDENT chỉ được xem đề PUBLIC+PUBLISHED của người khác, hoặc đề của
+  // chính mình (đề luyện cá nhân PRIVATE) — dùng NotFoundException thay vì
+  // Forbidden để không lộ sự tồn tại của đề riêng người khác qua việc đoán ID.
+  private assertVisibleOrNotFound(
+    exam: {
+      createdById: string;
+      visibility: ExamVisibility;
+      status: ExamPublishStatus;
+    },
+    user: JwtPayload,
+  ) {
+    if (user.role === Role.ADMIN) return;
+    if (exam.createdById === user.sub) return;
+    if (
+      exam.visibility === ExamVisibility.PUBLIC &&
+      exam.status === ExamPublishStatus.PUBLISHED
+    ) {
+      return;
+    }
+    throw new NotFoundException('Không tìm thấy đề thi');
   }
 
   // AI ghép đề hoàn chỉnh tự động: THPT lấy từ ngân hàng câu hỏi 1 môn (trắc
@@ -93,6 +158,9 @@ export class ExamsService {
         subjectId: dto.subjectId,
         durationMinutes: dto.durationMinutes ?? structure.durationMinutes,
         createdById: user.sub,
+        visibility: ExamVisibility.PUBLIC,
+        status: ExamPublishStatus.PUBLISHED,
+        purpose: ExamPurpose.OFFICIAL,
       },
     });
 
@@ -100,26 +168,35 @@ export class ExamsService {
     // Tích luỹ id câu hỏi đã dùng trong chính đề này — tránh 2 item cùng
     // subjectId+type+difficulty (hoặc admin khai báo trùng) chọn trùng câu.
     const usedQuestionIds: string[] = [];
-    for (const item of structure.items) {
-      const questions = await this.questionsService.pickOrSynthesizeQuestions({
-        subjectId: dto.subjectId,
-        type: item.type,
-        difficulty: item.difficulty,
-        count: item.questionCount,
-        creatorId: user.sub,
-        excludeIds: usedQuestionIds,
-      });
-      for (const q of questions) {
-        usedQuestionIds.push(q.id);
-        await this.prisma.examQuestion.create({
-          data: {
-            examId: exam.id,
-            questionId: q.id,
-            order: order++,
-            maxScore: item.maxScorePerQuestion,
+    try {
+      for (const item of structure.items) {
+        const questions = await this.questionsService.pickOrSynthesizeQuestions(
+          {
+            subjectId: dto.subjectId,
+            type: item.type,
+            difficulty: item.difficulty,
+            count: item.questionCount,
+            creatorId: user.sub,
+            excludeIds: usedQuestionIds,
           },
-        });
+        );
+        for (const q of questions) {
+          usedQuestionIds.push(q.id);
+          await this.prisma.examQuestion.create({
+            data: {
+              examId: exam.id,
+              questionId: q.id,
+              order: order++,
+              maxScore: item.maxScorePerQuestion,
+            },
+          });
+        }
       }
+    } catch (err) {
+      // Không đủ câu hỏi đã duyệt (hoặc lỗi khác giữa chừng) — không để lại
+      // đề rỗng/dở dang mà học sinh có thể lỡ thấy (xem P0 issue #3).
+      await this.prisma.exam.delete({ where: { id: exam.id } });
+      throw err;
     }
     return this.withDetails(exam.id);
   }
@@ -164,6 +241,9 @@ export class ExamsService {
         subjectId: null,
         durationMinutes: dto.durationMinutes,
         createdById: user.sub,
+        visibility: ExamVisibility.PUBLIC,
+        status: ExamPublishStatus.PUBLISHED,
+        purpose: ExamPurpose.OFFICIAL,
       },
     });
 
@@ -172,35 +252,44 @@ export class ExamsService {
     // "Toán học" cho cả 2 phần) — tích luỹ id câu hỏi đã dùng để không chọn
     // trùng câu giữa các section, tránh vi phạm unique (examId, questionId).
     const usedQuestionIds: string[] = [];
-    for (const [i, section] of sections.entries()) {
-      const examSection = await this.prisma.examSection.create({
-        data: {
-          examId: exam.id,
-          name: section.name,
-          order: i + 1,
-          maxScore: section.maxScore,
-        },
-      });
-      const perQuestionScore = section.maxScore / section.questionCount;
-      const questions = await this.questionsService.pickOrSynthesizeQuestions({
-        subjectId: section.subjectId,
-        type: QuestionType.MULTIPLE_CHOICE,
-        count: section.questionCount,
-        creatorId: user.sub,
-        excludeIds: usedQuestionIds,
-      });
-      for (const q of questions) {
-        usedQuestionIds.push(q.id);
-        await this.prisma.examQuestion.create({
+    try {
+      for (const [i, section] of sections.entries()) {
+        const examSection = await this.prisma.examSection.create({
           data: {
             examId: exam.id,
-            questionId: q.id,
-            sectionId: examSection.id,
-            order: order++,
-            maxScore: perQuestionScore,
+            name: section.name,
+            order: i + 1,
+            maxScore: section.maxScore,
           },
         });
+        const perQuestionScore = section.maxScore / section.questionCount;
+        const questions = await this.questionsService.pickOrSynthesizeQuestions(
+          {
+            subjectId: section.subjectId,
+            type: QuestionType.MULTIPLE_CHOICE,
+            count: section.questionCount,
+            creatorId: user.sub,
+            excludeIds: usedQuestionIds,
+          },
+        );
+        for (const q of questions) {
+          usedQuestionIds.push(q.id);
+          await this.prisma.examQuestion.create({
+            data: {
+              examId: exam.id,
+              questionId: q.id,
+              sectionId: examSection.id,
+              order: order++,
+              maxScore: perQuestionScore,
+            },
+          });
+        }
       }
+    } catch (err) {
+      // Không đủ câu hỏi đã duyệt cho một section (hoặc lỗi khác giữa
+      // chừng) — không để lại đề rỗng/dở dang (xem P0 issue #3).
+      await this.prisma.exam.delete({ where: { id: exam.id } });
+      throw err;
     }
     return this.withDetails(exam.id);
   }
@@ -220,6 +309,14 @@ export class ExamsService {
     }
     const questionCount = dto.questionCount ?? 10;
 
+    // Lấy câu hỏi TRƯỚC khi tạo Exam — pickQuestionsByTopic có thể báo lỗi
+    // thiếu dữ liệu (không đủ câu đã duyệt), tránh để lại một đề rỗng mồ côi.
+    const questions = await this.questionsService.pickQuestionsByTopic({
+      topicId: dto.topicId,
+      count: questionCount,
+      creatorId: user.sub,
+    });
+
     const exam = await this.prisma.exam.create({
       data: {
         title: `Luyện tập: ${topic.name}`,
@@ -227,14 +324,14 @@ export class ExamsService {
         subjectId: topic.subjectId,
         durationMinutes: Math.max(10, questionCount * 2),
         createdById: user.sub,
+        // Đề riêng của học sinh này — không được lẫn vào danh sách khám phá
+        // đề chung (xem findAllForUser).
+        visibility: ExamVisibility.PRIVATE,
+        status: ExamPublishStatus.PUBLISHED,
+        purpose: ExamPurpose.PERSONAL_PRACTICE,
       },
     });
 
-    const questions = await this.questionsService.pickQuestionsByTopic({
-      topicId: dto.topicId,
-      count: questionCount,
-      creatorId: user.sub,
-    });
     let order = 1;
     for (const q of questions) {
       await this.prisma.examQuestion.create({
@@ -270,14 +367,46 @@ export class ExamsService {
     }
   }
 
-  // Không còn lớp học/tenant scoping — mọi đề đã tồn tại đều mở cho tất cả
-  // học sinh tự chọn để thi thử/ôn tập. Kèm số liệu khám phá đề (lượt làm,
-  // điểm trung bình, lượt thích) để hiển thị dạng thẻ ở trang Đề thi.
-  async findAllForUser(user: JwtPayload) {
-    const exams = await this.prisma.exam.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
-    if (exams.length === 0) return [];
+  // Không còn lớp học/tenant scoping, nhưng vẫn phải tách bạch đề công khai
+  // với đề luyện cá nhân (xem [[ExamVisibility]]):
+  // - STUDENT: thấy đề PUBLIC+PUBLISHED (kho chung) + mọi đề của chính mình
+  //   (đề luyện cá nhân PRIVATE, hoặc đề DRAFT/ARCHIVED nếu họ tự tạo).
+  // - ADMIN: thấy mọi đề PUBLIC (kể cả DRAFT để tiếp tục soạn) nhưng KHÔNG
+  //   thấy đề luyện cá nhân PRIVATE của học sinh — danh sách này phục vụ quản
+  //   lý nội dung chính thức, không phải xem trộm đề luyện riêng.
+  // Kèm số liệu khám phá đề (lượt làm, điểm trung bình, lượt thích) để hiển
+  // thị dạng thẻ ở trang Đề thi.
+  async findAllForUser(user: JwtPayload, page?: number, limit?: number) {
+    const where: Prisma.ExamWhereInput =
+      user.role === Role.ADMIN
+        ? { visibility: ExamVisibility.PUBLIC }
+        : {
+            OR: [
+              {
+                visibility: ExamVisibility.PUBLIC,
+                status: ExamPublishStatus.PUBLISHED,
+              },
+              { createdById: user.sub },
+            ],
+          };
+    const {
+      skip,
+      take,
+      page: safePage,
+      limit: safeLimit,
+    } = toSkipTake(page, limit);
+    const [exams, total] = await Promise.all([
+      this.prisma.exam.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.exam.count({ where }),
+    ]);
+    if (exams.length === 0) {
+      return toPaginatedResult([], total, safePage, safeLimit);
+    }
 
     const examIds = exams.map((e) => e.id);
 
@@ -321,7 +450,7 @@ export class ExamsService {
       scoreSumByExam.set(examId, entry);
     }
 
-    return exams.map((exam) => {
+    const data = exams.map((exam) => {
       const scoreEntry = scoreSumByExam.get(exam.id);
       return {
         ...exam,
@@ -333,12 +462,14 @@ export class ExamsService {
           : null,
       };
     });
+    return toPaginatedResult(data, total, safePage, safeLimit);
   }
 
   // Học sinh bấm "thích" một đề thi khi đang khám phá đề — không ảnh hưởng
   // đến việc làm bài, chỉ phục vụ hiển thị lượt thích.
   async toggleLike(examId: string, user: JwtPayload) {
-    await this.findExamOrThrow(examId);
+    const exam = await this.findExamOrThrow(examId);
+    this.assertVisibleOrNotFound(exam, user);
     const existing = await this.prisma.examLike.findUnique({
       where: { examId_studentId: { examId, studentId: user.sub } },
     });
@@ -353,8 +484,9 @@ export class ExamsService {
     return { liked: !existing, likeCount };
   }
 
-  async findOne(id: string) {
-    await this.findExamOrThrow(id);
+  async findOne(id: string, user: JwtPayload) {
+    const exam = await this.findExamOrThrow(id);
+    this.assertVisibleOrNotFound(exam, user);
     return this.prisma.exam.findUniqueOrThrow({
       where: { id },
       include: { sections: { orderBy: { order: 'asc' } } },
@@ -375,6 +507,70 @@ export class ExamsService {
       throw new ForbiddenException('Câu hỏi chưa ở kho dùng chung đã duyệt');
     }
 
+    // Đề THPT gắn cứng 1 môn ở cấp Exam — câu hỏi phải cùng môn.
+    if (exam.subjectId && question.subjectId !== exam.subjectId) {
+      throw new BadRequestException(
+        'Câu hỏi không cùng môn học với đề thi này',
+      );
+    }
+
+    // Đề ĐGNL xác định môn theo section (Exam.subjectId để null) — bắt buộc
+    // chỉ định sectionId, và section đó phải thuộc chính đề này.
+    if (exam.category === ExamCategory.DGNL && !dto.sectionId) {
+      throw new BadRequestException(
+        'Đề ĐGNL cần chỉ định sectionId khi thêm câu hỏi',
+      );
+    }
+    let section: { id: string; examId: string; maxScore: number } | null = null;
+    if (dto.sectionId) {
+      section = await this.prisma.examSection.findUnique({
+        where: { id: dto.sectionId },
+        select: { id: true, examId: true, maxScore: true },
+      });
+      if (!section || section.examId !== examId) {
+        throw new BadRequestException('Section không thuộc đề thi này');
+      }
+    }
+
+    // Thứ tự (order) không được trùng trong TOÀN BỘ đề, không chỉ trong section.
+    const examWideQuestions = await this.prisma.examQuestion.findMany({
+      where: { examId },
+      select: { order: true },
+    });
+    if (examWideQuestions.some((eq) => eq.order === dto.order)) {
+      throw new BadRequestException(
+        `Thứ tự ${dto.order} đã được dùng trong đề này`,
+      );
+    }
+
+    if (section) {
+      const sectionQuestions = await this.prisma.examQuestion.findMany({
+        where: { sectionId: section.id },
+        select: { maxScore: true, question: { select: { subjectId: true } } },
+      });
+      // Câu hỏi phải cùng môn với các câu khác đã có trong section (ĐGNL có
+      // thể nhiều section cùng môn, nhưng trong 1 section phải đồng nhất).
+      if (
+        sectionQuestions.some(
+          (sq) => sq.question.subjectId !== question.subjectId,
+        )
+      ) {
+        throw new BadRequestException(
+          'Câu hỏi không cùng môn học với các câu khác trong section này',
+        );
+      }
+      const usedScore = sectionQuestions.reduce(
+        (sum, sq) => sum + sq.maxScore,
+        0,
+      );
+      // Dung sai nhỏ cho lỗi làm tròn số thực (Float), không phải để cho phép vượt thật sự.
+      if (usedScore + dto.maxScore > section.maxScore + 1e-6) {
+        throw new BadRequestException(
+          `Tổng điểm section sẽ vượt quá thang điểm cho phép (${section.maxScore}) — hiện đã dùng ${usedScore}`,
+        );
+      }
+    }
+
     return this.prisma.examQuestion.create({
       data: {
         examId: exam.id,
@@ -387,7 +583,7 @@ export class ExamsService {
   }
 
   async listQuestions(examId: string, user: JwtPayload) {
-    const exam = await this.findOne(examId);
+    const exam = await this.findOne(examId, user);
     const examQuestions = await this.prisma.examQuestion.findMany({
       where: { examId: exam.id },
       include: { question: true },
@@ -437,6 +633,7 @@ export class ExamsService {
 
   async startAttempt(examId: string, user: JwtPayload) {
     const exam = await this.findExamOrThrow(examId);
+    this.assertVisibleOrNotFound(exam, user);
 
     const existingInProgress = await this.prisma.examAttempt.findFirst({
       where: {
@@ -532,6 +729,16 @@ export class ExamsService {
       throw new BadRequestException(
         'Đã hết thời gian làm bài — hệ thống đã tự động nộp bài, vui lòng xem kết quả',
       );
+    }
+    // Chặn học sinh lưu câu trả lời cho một questionId không thuộc đề đang
+    // thi (vd. sửa request thủ công) — vừa tránh rác dữ liệu, vừa tránh lộ
+    // việc một câu hỏi bất kỳ tồn tại trong hệ thống qua cách này.
+    const belongsToExam = await this.prisma.examQuestion.findUnique({
+      where: { examId_questionId: { examId: attempt.examId, questionId } },
+      select: { questionId: true },
+    });
+    if (!belongsToExam) {
+      throw new BadRequestException('Câu hỏi này không thuộc đề đang thi');
     }
     return this.prisma.answer.upsert({
       where: { attemptId_questionId: { attemptId, questionId } },
@@ -662,6 +869,8 @@ export class ExamsService {
         aiComment: answer?.aiComment ?? null,
         isAiReferenceOnly: answer?.isAiReferenceOnly ?? false,
         aiExplanation: answer?.aiExplanation ?? null,
+        needsManualGrading: answer?.needsManualGrading ?? false,
+        fallbackReason: answer?.fallbackReason ?? null,
       };
     });
   }

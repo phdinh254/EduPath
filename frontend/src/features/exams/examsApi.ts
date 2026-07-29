@@ -1,9 +1,22 @@
 import { apiClient } from '../../lib/api-client';
-import type { AttemptReviewItem, Exam, ExamAttempt, ExamCategory, ExamQuestion } from '../../types/api';
+import type {
+  AttemptReviewItem,
+  Exam,
+  ExamAttempt,
+  ExamCategory,
+  ExamQuestion,
+  PaginatedResult,
+} from '../../types/api';
 
+// Backend giờ trả về có phân trang (bảo vệ khỏi query không giới hạn) — trang
+// khám phá đề hiện lọc/sắp xếp phía client trên toàn bộ danh mục nên vẫn xin
+// trang lớn nhất cho phép (100) thay vì UI phân trang thật; tách trang thật
+// (chuyển bộ lọc lên server) là việc riêng ngoài phạm vi hiện tại.
 export async function fetchExams(): Promise<Exam[]> {
-  const { data } = await apiClient.get<Exam[]>('/exams');
-  return data;
+  const { data } = await apiClient.get<PaginatedResult<Exam>>('/exams', {
+    params: { limit: 100 },
+  });
+  return data.data;
 }
 
 export async function fetchExam(examId: string): Promise<Exam> {
@@ -115,5 +128,18 @@ export async function fetchAttemptReview(attemptId: string): Promise<AttemptRevi
 
 export async function toggleExamLike(examId: string): Promise<{ liked: boolean; likeCount: number }> {
   const { data } = await apiClient.post<{ liked: boolean; likeCount: number }>(`/exams/${examId}/like`);
+  return data;
+}
+
+// Đề tạo thủ công (POST /exams) bắt đầu ở DRAFT — gọi sau khi đã thêm đủ câu
+// hỏi để học sinh bắt đầu thấy đề.
+export async function publishExam(examId: string): Promise<Exam> {
+  const { data } = await apiClient.post<Exam>(`/exams/${examId}/publish`);
+  return data;
+}
+
+// Rút đề khỏi danh sách khám phá — lịch sử làm bài cũ vẫn giữ nguyên.
+export async function archiveExam(examId: string): Promise<Exam> {
+  const { data } = await apiClient.post<Exam>(`/exams/${examId}/archive`);
   return data;
 }

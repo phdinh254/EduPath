@@ -4,9 +4,12 @@ import { fetchUsers, setUserActive } from '../../features/users/usersApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import { Pagination } from '../../components/Pagination';
 import { Badge, Card, PageHeader } from '../../components/ui/Card';
 import { UsersIcon } from '../../components/ui/Icons';
 import type { Role } from '../../types/api';
+
+const PAGE_LIMIT = 20;
 
 const ROLE_LABEL: Record<Role, string> = { STUDENT: 'Học sinh', ADMIN: 'Quản trị viên' };
 
@@ -21,10 +24,11 @@ export function AdminUsersPage() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [roleFilter, setRoleFilter] = useState<Role | ''>('');
+  const [page, setPage] = useState(1);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['admin-users', roleFilter],
-    queryFn: () => fetchUsers(roleFilter || undefined),
+    queryKey: ['admin-users', roleFilter, page],
+    queryFn: () => fetchUsers(roleFilter || undefined, page, PAGE_LIMIT),
   });
 
   const toggleMutation = useMutation({
@@ -45,7 +49,10 @@ export function AdminUsersPage() {
         actions={
           <select
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value as Role | '')}
+            onChange={(e) => {
+              setRoleFilter(e.target.value as Role | '');
+              setPage(1);
+            }}
             className="rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
           >
             <option value="">Tất cả vai trò</option>
@@ -57,10 +64,10 @@ export function AdminUsersPage() {
 
       {isLoading && <LoadingState />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}
-      {data && data.length === 0 && <EmptyState label="Không có người dùng nào." />}
+      {data && data.data.length === 0 && <EmptyState label="Không có người dùng nào." />}
 
       <Card className="divide-y divide-slate-100 overflow-hidden p-0 dark:divide-slate-800">
-        {data?.map((u) => (
+        {data?.data.map((u) => (
           <div key={u.id} className="flex items-center justify-between gap-4 p-4">
             <div className="flex min-w-0 items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-semibold text-white">
@@ -88,6 +95,9 @@ export function AdminUsersPage() {
           </div>
         ))}
       </Card>
+      {data && (
+        <Pagination page={data.page} limit={data.limit} total={data.total} onPageChange={setPage} />
+      )}
     </div>
   );
 }

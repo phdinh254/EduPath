@@ -1,13 +1,27 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
-import { addExamQuestion, fetchExam, fetchExamAttempts, fetchExamQuestions } from '../../features/exams/examsApi';
+import {
+  addExamQuestion,
+  archiveExam,
+  fetchExam,
+  fetchExamAttempts,
+  fetchExamQuestions,
+  publishExam,
+} from '../../features/exams/examsApi';
 import { fetchQuestions } from '../../features/questions/questionsApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { useToast } from '../../components/ToastProvider';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
 import { Badge, Button, Card } from '../../components/ui/Card';
 import { ClockIcon, FileTextIcon } from '../../components/ui/Icons';
+import type { ExamPublishStatus } from '../../types/api';
+
+const STATUS_BADGE: Record<ExamPublishStatus, { label: string; variant: 'amber' | 'emerald' | 'slate' }> = {
+  DRAFT: { label: 'Nháp — học sinh chưa thấy', variant: 'amber' },
+  PUBLISHED: { label: 'Đã công bố', variant: 'emerald' },
+  ARCHIVED: { label: 'Đã lưu trữ', variant: 'slate' },
+};
 
 export function AdminExamDetailPage() {
   const { examId } = useParams<{ examId: string }>();
@@ -51,8 +65,29 @@ export function AdminExamDetailPage() {
     addMutation.mutate();
   }
 
+  const publishMutation = useMutation({
+    mutationFn: () => publishExam(examId!),
+    onSuccess: () => {
+      showToast('Đã công bố đề — học sinh bắt đầu thấy đề này', 'success');
+      queryClient.invalidateQueries({ queryKey: ['exam', examId] });
+      queryClient.invalidateQueries({ queryKey: ['exams'] });
+    },
+    onError: (err) => showToast(getApiErrorMessage(err), 'error'),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveExam(examId!),
+    onSuccess: () => {
+      showToast('Đã lưu trữ đề — rút khỏi danh sách khám phá', 'success');
+      queryClient.invalidateQueries({ queryKey: ['exam', examId] });
+      queryClient.invalidateQueries({ queryKey: ['exams'] });
+    },
+    onError: (err) => showToast(getApiErrorMessage(err), 'error'),
+  });
+
   const usedQuestionIds = new Set(examQuestionsQuery.data?.map((eq) => eq.questionId));
-  const availableQuestions = (questionBankQuery.data ?? []).filter((q) => !usedQuestionIds.has(q.id));
+  const availableQuestions = (questionBankQuery.data?.data ?? []).filter((q) => !usedQuestionIds.has(q.id));
+  const exam = examQuery.data;
 
   return (
     <div>
@@ -60,15 +95,33 @@ export function AdminExamDetailPage() {
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30">
           <FileTextIcon className="h-5 w-5" />
         </span>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-            {examQuery.data?.title}
-          </h1>
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">{exam?.title}</h1>
+            {exam && exam.purpose === 'OFFICIAL' && (
+              <Badge variant={STATUS_BADGE[exam.status].variant}>{STATUS_BADGE[exam.status].label}</Badge>
+            )}
+          </div>
           <p className="mt-0.5 flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
             <ClockIcon className="h-3.5 w-3.5" />
-            {examQuery.data?.durationMinutes} phút
+            {exam?.durationMinutes} phút
           </p>
         </div>
+        {exam && exam.purpose === 'OFFICIAL' && exam.status === 'DRAFT' && (
+          <Button onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending} className="shrink-0">
+            {publishMutation.isPending ? 'Đang công bố...' : 'Công bố đề'}
+          </Button>
+        )}
+        {exam && exam.purpose === 'OFFICIAL' && exam.status === 'PUBLISHED' && (
+          <Button
+            variant="secondary"
+            onClick={() => archiveMutation.mutate()}
+            disabled={archiveMutation.isPending}
+            className="shrink-0"
+          >
+            {archiveMutation.isPending ? 'Đang lưu trữ...' : 'Lưu trữ đề'}
+          </Button>
+        )}
       </div>
 
       <h2 className="mb-3 text-lg font-semibold text-slate-900 dark:text-slate-100">Câu hỏi trong đề</h2>
@@ -125,6 +178,8 @@ export function AdminExamDetailPage() {
             <span className="text-slate-700 dark:text-slate-300">{attempt.student?.fullName}</span>
             {attempt.status === 'IN_PROGRESS' ? (
               <Badge variant="amber">Đang làm bài</Badge>
+            ) : attempt.status === 'PENDING_REVIEW' ? (
+              <Badge variant="red">Chờ chấm tự luận</Badge>
             ) : (
               <Badge variant="emerald">{attempt.totalScore?.toFixed(2)} điểm</Badge>
             )}

@@ -2,7 +2,10 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import {
   ContentStatus,
   DifficultyLevel,
@@ -12,6 +15,11 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../ai/gemini.service';
+import {
+  GENERATE_QUESTIONS_QUEUE,
+  type GenerateQuestionsJobData,
+} from './generate-questions-queue.constants';
+import { toPaginatedResult, toSkipTake } from '../common/pagination.util';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { GenerateQuestionsDto } from './dto/generate-questions.dto';
@@ -26,6 +34,53 @@ import {
   synthesizeQuestion,
   type SynthesizedQuestion,
 } from './ai-question.generator';
+
+// Tăng khi sửa nội dung prompt sinh câu hỏi (buildSynthesizePrompt) — lưu vào
+// Question.generationPromptVersion để truy vết câu cũ được sinh bằng bản nào.
+const QUESTION_GENERATION_PROMPT_VERSION = 'question-gen-v1';
+const RULE_BASED_MODEL_LABEL = 'RULE_BASED_TEMPLATE';
+
+// Kiểm tra cấu trúc tối thiểu trước khi đưa câu AI sinh vào hàng chờ duyệt —
+// không đánh giá được "chất lượng học thuật" (việc đó dành cho ADMIN), nhưng
+// chặn được JSON hỏng/thiếu trường mà Gemini đôi khi trả về.
+function isStructurallyValid(
+  type: QuestionType,
+  q: SynthesizedQuestion,
+): boolean {
+  if (!q.content || q.content.trim().length < 5) return false;
+  if (type === QuestionType.ESSAY) return true;
+  if (!q.explanation || q.explanation.trim().length === 0) return false;
+
+  if (type === QuestionType.MULTIPLE_CHOICE) {
+    const options = q.options;
+    const correct = (q.correctAnswer as { index?: number } | null)?.index;
+    return (
+      Array.isArray(options) &&
+      options.length === 4 &&
+      options.every((o) => typeof o === 'string' && o.trim().length > 0) &&
+      typeof correct === 'number' &&
+      correct >= 0 &&
+      correct <= 3
+    );
+  }
+  if (type === QuestionType.TRUE_FALSE) {
+    const options = q.options;
+    const statements = (q.correctAnswer as { statements?: unknown } | null)
+      ?.statements;
+    return (
+      Array.isArray(options) &&
+      options.length === 4 &&
+      Array.isArray(statements) &&
+      statements.length === 4 &&
+      statements.every((s) => typeof s === 'boolean')
+    );
+  }
+  if (type === QuestionType.SHORT_ANSWER) {
+    const value = (q.correctAnswer as { value?: string } | null)?.value;
+    return typeof value === 'string' && value.trim().length > 0;
+  }
+  return false;
+}
 
 function assertValidTrueFalse(dto: {
   type: QuestionType;
@@ -49,26 +104,37 @@ export class QuestionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gemini: GeminiService,
+    @InjectQueue(GENERATE_QUESTIONS_QUEUE)
+    private readonly generateQuestionsQueue: Queue<GenerateQuestionsJobData>,
   ) {}
 
   // Gemini thật khi đã cấu hình; rơi về mẫu rule-based (synthesizeQuestion)
   // nếu chưa cấu hình hoặc Gemini lỗi — không để sự cố bên thứ ba chặn việc
-  // sinh đề/câu hỏi.
+  // sinh câu hỏi. Trả kèm tên model thực sự dùng để ghi vào
+  // Question.generationModel (truy vết chất lượng theo nguồn).
   private async synthesize(params: {
     type: QuestionType;
     difficulty: DifficultyLevel;
     subjectName: string;
     topicName: string;
     index: number;
-  }): Promise<SynthesizedQuestion> {
+  }): Promise<{ question: SynthesizedQuestion; model: string }> {
     if (!this.gemini.isConfigured()) {
-      return synthesizeQuestion(params);
+      return {
+        question: synthesizeQuestion(params),
+        model: RULE_BASED_MODEL_LABEL,
+      };
     }
     try {
       const prompt = buildSynthesizePrompt(params);
-      return await this.gemini.generateJson<SynthesizedQuestion>(prompt);
+      const question =
+        await this.gemini.generateJson<SynthesizedQuestion>(prompt);
+      return { question, model: this.gemini.getModelName() };
     } catch {
-      return synthesizeQuestion(params);
+      return {
+        question: synthesizeQuestion(params),
+        model: RULE_BASED_MODEL_LABEL,
+      };
     }
   }
 
@@ -99,15 +165,16 @@ export class QuestionsService {
     if (!topic || topic.subjectId !== dto.subjectId) {
       throw new NotFoundException('Không tìm thấy chuyên đề thuộc môn học này');
     }
-    const created = await Promise.all(
+    const results = await Promise.all(
       Array.from({ length: dto.count }, async (_, index) => {
-        const synthesized = await this.synthesize({
+        const { question: synthesized, model } = await this.synthesize({
           type: dto.type,
           difficulty: dto.difficulty,
           subjectName: topic.subject.name,
           topicName: topic.name,
           index,
         });
+        if (!isStructurallyValid(dto.type, synthesized)) return null;
         return this.prisma.question.create({
           data: {
             subjectId: dto.subjectId,
@@ -121,19 +188,63 @@ export class QuestionsService {
             createdById: user.sub,
             status: ContentStatus.PENDING_APPROVAL,
             source: QuestionSource.AI_GENERATED,
+            generationModel: model,
+            generationPromptVersion: QUESTION_GENERATION_PROMPT_VERSION,
           },
         });
       }),
     );
-    return created;
+    return results.filter((q) => q !== null);
   }
 
-  // Dùng nội bộ bởi ExamsService khi ghép đề tự động: lấy câu hỏi đã duyệt
-  // sẵn có, và AI sinh bù ngay tại chỗ (tự động APPROVED, vì đề cần dùng ngay
-  // — không có bước chờ admin) nếu ngân hàng câu hỏi chưa đủ. excludeIds dùng
-  // để tránh chọn trùng câu hỏi giữa các item/section khác nhau của CÙNG một
-  // đề khi chúng trỏ tới cùng subjectId (vd. ĐGNL có 2 section cùng dùng
-  // Toán) — thiếu chặn này sẽ vi phạm unique constraint (examId, questionId).
+  // Sinh bù câu còn thiếu vào HÀNG CHỜ DUYỆT (không bao giờ APPROVED thẳng) —
+  // được GenerateQuestionsProcessor gọi khi xử lý job trong hàng đợi (xem
+  // pickOrSynthesizeQuestions). Không trả về để dùng ngay, chỉ để ADMIN có
+  // sẵn nội dung chờ xem xét thay vì phải tự soạn từ đầu.
+  async processGenerateQuestionsJob(
+    params: GenerateQuestionsJobData,
+  ): Promise<number> {
+    const rows = await Promise.all(
+      Array.from({ length: params.count }, async (_, i) => {
+        const { question: synthesized, model } = await this.synthesize({
+          type: params.type,
+          difficulty: params.difficulty,
+          subjectName: params.subjectName,
+          topicName: params.topicName,
+          index: params.startIndex + i,
+        });
+        if (!isStructurallyValid(params.type, synthesized)) return null;
+        return this.prisma.question.create({
+          data: {
+            subjectId: params.subjectId,
+            topicId: params.topicId,
+            type: params.type,
+            difficulty: params.difficulty,
+            content: synthesized.content,
+            options: synthesized.options as Prisma.InputJsonValue,
+            correctAnswer: synthesized.correctAnswer as Prisma.InputJsonValue,
+            explanation: synthesized.explanation,
+            createdById: params.creatorId,
+            // KHÔNG tự động APPROVED — nội dung AI sinh luôn phải qua ADMIN
+            // duyệt trước khi vào kho dùng chung (xem P0 issue #3).
+            status: ContentStatus.PENDING_APPROVAL,
+            source: QuestionSource.AI_GENERATED,
+            generationModel: model,
+            generationPromptVersion: QUESTION_GENERATION_PROMPT_VERSION,
+          },
+        });
+      }),
+    );
+    return rows.filter((q) => q !== null).length;
+  }
+
+  // Dùng nội bộ bởi ExamsService khi ghép đề tự động (chỉ ADMIN gọi được, xem
+  // ExamsController.generate): lấy câu hỏi đã duyệt sẵn có. Nếu chưa đủ, AI
+  // sinh bù vào hàng chờ duyệt để ADMIN xử lý, nhưng đề KHÔNG được ghép bằng
+  // nội dung chưa duyệt — báo lỗi thiếu dữ liệu thay vì xuất bản câu giả (xem
+  // P0 issue #3). excludeIds dùng để tránh chọn trùng câu hỏi giữa các
+  // item/section khác nhau của CÙNG một đề khi chúng trỏ tới cùng subjectId
+  // (vd. ĐGNL có 2 section cùng dùng Toán).
   async pickOrSynthesizeQuestions(params: {
     subjectId: string;
     type: QuestionType;
@@ -166,47 +277,38 @@ export class QuestionsService {
       where: { subjectId: params.subjectId },
       include: { subject: true },
     });
-    if (!topic) {
-      throw new BadRequestException(
-        'Môn học chưa có chuyên đề nào để AI sinh câu hỏi',
-      );
+    const difficulty = params.difficulty ?? DifficultyLevel.KNOWLEDGE;
+    let queued = false;
+    if (topic) {
+      // Xếp hàng chạy nền qua BullMQ thay vì chờ tại đây — kết quả không
+      // được dùng cho lần ghép đề này (đã throw lỗi ngay bên dưới), chỉ để
+      // ADMIN có sẵn nội dung chờ duyệt cho lần sau, nên không cần đợi.
+      await this.generateQuestionsQueue.add('generate', {
+        subjectId: params.subjectId,
+        topicId: topic.id,
+        topicName: topic.name,
+        subjectName: topic.subject.name,
+        type: params.type,
+        difficulty,
+        count: missing,
+        creatorId: params.creatorId,
+        startIndex: existing.length,
+      });
+      queued = true;
     }
-    const difficulty = params.difficulty ?? 'KNOWLEDGE';
-    const synthesizedRows = await Promise.all(
-      Array.from({ length: missing }, async (_, i) => {
-        const synthesized = await this.synthesize({
-          type: params.type,
-          difficulty,
-          subjectName: topic.subject.name,
-          topicName: topic.name,
-          index: existing.length + i,
-        });
-        return this.prisma.question.create({
-          data: {
-            subjectId: params.subjectId,
-            topicId: topic.id,
-            type: params.type,
-            difficulty,
-            content: synthesized.content,
-            options: synthesized.options as Prisma.InputJsonValue,
-            correctAnswer: synthesized.correctAnswer as Prisma.InputJsonValue,
-            explanation: synthesized.explanation,
-            createdById: params.creatorId,
-            // Sinh bù để dùng ngay trong đề — không qua hàng chờ duyệt, vì mục
-            // tiêu là đề phải sẵn sàng tức thời. ADMIN vẫn có thể rút lại sau
-            // qua reject() nếu phát hiện nội dung có vấn đề.
-            status: ContentStatus.APPROVED,
-            source: QuestionSource.AI_GENERATED,
-          },
-        });
-      }),
+    throw new BadRequestException(
+      `Không đủ câu hỏi đã duyệt cho môn học này (cần ${params.count}, hiện có ${existing.length})` +
+        (queued
+          ? ' — AI đang sinh thêm câu vào hàng chờ duyệt trong nền, vào trang Câu hỏi kiểm tra lại sau ít phút rồi ghép lại đề.'
+          : ' — chưa có chuyên đề nào của môn này để AI sinh bù, hãy bổ sung câu hỏi thủ công.'),
     );
-    return [...existing, ...synthesizedRows];
   }
 
   // Dùng bởi ExamsService.generateTopicPractice — luyện tập nhanh đúng một
-  // chuyên đề (lấy từ lộ trình AI), khác với pickOrSynthesizeQuestions vốn
-  // lọc theo subjectId+type+difficulty để ghép cả đề theo ExamStructure.
+  // chuyên đề do STUDENT tự bấm. KHÔNG được sinh câu hỏi mới ở đây: học sinh
+  // không có quyền kích hoạt việc tạo nội dung dùng chung (xem P0 issue #3)
+  // — chỉ lấy từ những câu ADMIN đã duyệt sẵn. Nếu thiếu, báo lỗi rõ ràng
+  // thay vì âm thầm xuất bản câu giả.
   async pickQuestionsByTopic(params: {
     topicId: string;
     count: number;
@@ -217,45 +319,12 @@ export class QuestionsService {
       orderBy: { source: 'asc' },
       take: params.count,
     });
-    if (existing.length >= params.count) {
-      return existing.slice(0, params.count);
+    if (existing.length === 0) {
+      throw new BadRequestException(
+        'Chuyên đề này chưa có câu hỏi nào đã được duyệt để luyện tập — hãy thử chuyên đề khác hoặc quay lại sau',
+      );
     }
-
-    const missing = params.count - existing.length;
-    const topic = await this.prisma.topic.findUnique({
-      where: { id: params.topicId },
-      include: { subject: true },
-    });
-    if (!topic) {
-      throw new NotFoundException('Không tìm thấy chuyên đề');
-    }
-    const synthesizedRows = await Promise.all(
-      Array.from({ length: missing }, async (_, i) => {
-        const synthesized = await this.synthesize({
-          type: QuestionType.MULTIPLE_CHOICE,
-          difficulty: 'KNOWLEDGE',
-          subjectName: topic.subject.name,
-          topicName: topic.name,
-          index: existing.length + i,
-        });
-        return this.prisma.question.create({
-          data: {
-            subjectId: topic.subjectId,
-            topicId: topic.id,
-            type: QuestionType.MULTIPLE_CHOICE,
-            difficulty: 'KNOWLEDGE',
-            content: synthesized.content,
-            options: synthesized.options as Prisma.InputJsonValue,
-            correctAnswer: synthesized.correctAnswer as Prisma.InputJsonValue,
-            explanation: synthesized.explanation,
-            createdById: params.creatorId,
-            status: ContentStatus.APPROVED,
-            source: QuestionSource.AI_GENERATED,
-          },
-        });
-      }),
-    );
-    return [...existing, ...synthesizedRows];
+    return existing;
   }
 
   // Bước 1/2 của luồng nhập đề thi thật: AI tách văn bản thô ADMIN dán vào
@@ -286,8 +355,15 @@ export class QuestionsService {
       topicNames: topics.map((t) => t.name),
       rawText: dto.rawText,
     });
-    const parsed =
-      await this.gemini.generateJson<ParsedImportQuestion[]>(prompt);
+    let parsed: ParsedImportQuestion[];
+    try {
+      parsed = await this.gemini.generateJson<ParsedImportQuestion[]>(prompt);
+    } catch {
+      // Vượt ngân sách/ngày, timeout, hoặc Gemini lỗi.
+      throw new ServiceUnavailableException(
+        'AI đang tạm thời không khả dụng, vui lòng thử lại sau ít phút',
+      );
+    }
     if (!Array.isArray(parsed)) {
       throw new BadRequestException(
         'AI không tách được câu hỏi hợp lệ từ văn bản đã cung cấp — hãy thử lại với văn bản rõ ràng hơn',
@@ -335,11 +411,24 @@ export class QuestionsService {
     });
   }
 
-  findAll(status?: ContentStatus) {
-    return this.prisma.question.findMany({
-      where: status ? { status } : undefined,
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(status?: ContentStatus, page?: number, limit?: number) {
+    const where = status ? { status } : undefined;
+    const {
+      skip,
+      take,
+      page: safePage,
+      limit: safeLimit,
+    } = toSkipTake(page, limit);
+    const [data, total] = await Promise.all([
+      this.prisma.question.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.question.count({ where }),
+    ]);
+    return toPaginatedResult(data, total, safePage, safeLimit);
   }
 
   async findOne(id: string) {

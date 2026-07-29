@@ -1,5 +1,5 @@
 import { apiClient } from '../../lib/api-client';
-import type { ExamAttempt, PendingReviewAnswer } from '../../types/api';
+import type { AiGradingDeviationStats, ExamAttempt, PendingReviewAnswer } from '../../types/api';
 
 export async function submitAttempt(attemptId: string): Promise<ExamAttempt> {
   const { data } = await apiClient.post<ExamAttempt>(`/grading/attempts/${attemptId}/submit`);
@@ -21,5 +21,10 @@ export async function reviewEssayAnswer(
 
 export async function explainWrongAnswer(answerId: string): Promise<{ aiExplanation: string }> {
   const { data } = await apiClient.post<{ aiExplanation: string }>(`/grading/answers/${answerId}/explain`);
+  return data;
+}
+
+export async function fetchAiQualityStats(): Promise<AiGradingDeviationStats> {
+  const { data } = await apiClient.get<AiGradingDeviationStats>('/grading/ai-quality-stats');
   return data;
 }

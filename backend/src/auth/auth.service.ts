@@ -25,6 +25,12 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+// Chống dò mật khẩu: sau MAX_FAILED_ATTEMPTS lần sai liên tiếp, khoá đăng
+// nhập tạm thời LOCKOUT_DURATION_MS thay vì khoá vĩnh viễn (không cần ADMIN
+// can thiệp thủ công cho từng tài khoản).
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60_000;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -54,10 +60,45 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const user = await this.usersService.findByEmail(dto.email);
-    if (!user || !(await argon2.verify(user.passwordHash, dto.password))) {
+    if (user?.lockedUntil && user.lockedUntil > new Date()) {
+      const minutesLeft = Math.ceil(
+        (user.lockedUntil.getTime() - Date.now()) / 60_000,
+      );
+      throw new UnauthorizedException(
+        `Tài khoản tạm khoá do đăng nhập sai nhiều lần — thử lại sau khoảng ${minutesLeft} phút`,
+      );
+    }
+
+    const passwordOk =
+      !!user && (await argon2.verify(user.passwordHash, dto.password));
+    if (!user || !passwordOk) {
+      if (user)
+        await this.registerFailedLogin(user.id, user.failedLoginAttempts);
       throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
     }
+
+    if (user.failedLoginAttempts > 0) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      });
+    }
     return this.buildTokens(user.id, user.email, user.role);
+  }
+
+  private async registerFailedLogin(userId: string, currentAttempts: number) {
+    const attempts = currentAttempts + 1;
+    const lockedUntil =
+      attempts >= MAX_FAILED_ATTEMPTS
+        ? new Date(Date.now() + LOCKOUT_DURATION_MS)
+        : null;
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedLoginAttempts: lockedUntil ? 0 : attempts,
+        lockedUntil,
+      },
+    });
   }
 
   // Đăng nhập/đăng ký bằng Google: khớp theo email, tự tạo tài khoản STUDENT

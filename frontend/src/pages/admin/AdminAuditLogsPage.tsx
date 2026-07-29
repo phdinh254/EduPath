@@ -1,12 +1,20 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAuditLogs } from '../../features/admin/adminApi';
 import { getApiErrorMessage } from '../../lib/api-client';
 import { EmptyState, ErrorState, LoadingState } from '../../components/StateViews';
+import { Pagination } from '../../components/Pagination';
 import { Card, PageHeader } from '../../components/ui/Card';
 import { LogIcon } from '../../components/ui/Icons';
 
+const PAGE_LIMIT = 20;
+
 export function AdminAuditLogsPage() {
-  const { data, isLoading, error } = useQuery({ queryKey: ['audit-logs'], queryFn: fetchAuditLogs });
+  const [page, setPage] = useState(1);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['audit-logs', page],
+    queryFn: () => fetchAuditLogs(page, PAGE_LIMIT),
+  });
 
   return (
     <div>
@@ -17,10 +25,10 @@ export function AdminAuditLogsPage() {
       />
       {isLoading && <LoadingState />}
       {error && <ErrorState message={getApiErrorMessage(error)} />}
-      {data && data.length === 0 && <EmptyState label="Chưa có hoạt động nào được ghi nhận." />}
+      {data && data.data.length === 0 && <EmptyState label="Chưa có hoạt động nào được ghi nhận." />}
 
       <Card className="divide-y divide-slate-100 overflow-hidden p-0 dark:divide-slate-800">
-        {data?.map((log) => (
+        {data?.data.map((log) => (
           <div key={log.id} className="flex items-center gap-3 p-4 text-sm">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
               <LogIcon className="h-4 w-4" />
@@ -36,6 +44,9 @@ export function AdminAuditLogsPage() {
           </div>
         ))}
       </Card>
+      {data && (
+        <Pagination page={data.page} limit={data.limit} total={data.total} onPageChange={setPage} />
+      )}
     </div>
   );
 }

@@ -21,6 +21,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { UsersService } from './users.service';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -50,10 +51,28 @@ export class UsersController {
     description: 'Chỉ ADMIN. Lọc theo vai trò nếu có.',
   })
   @ApiQuery({ name: 'role', enum: Role, required: false })
-  @ApiResponse({ status: 200, description: 'Danh sách người dùng.' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Mặc định 1',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Mặc định 20, tối đa 100',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách người dùng có phân trang.',
+  })
   @ApiResponse({ status: 403, description: 'Không phải ADMIN.' })
-  findAll(@Query('role') role?: Role) {
-    return this.usersService.findAll(role);
+  findAll(
+    @Query('role') role: Role | undefined,
+    @Query() pagination: PaginationQueryDto,
+  ) {
+    return this.usersService.findAll(role, pagination.page, pagination.limit);
   }
 
   @Roles(Role.ADMIN)

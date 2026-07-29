@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { DifficultyLevel, QuestionType } from '@prisma/client';
 
 export class CreateQuestionDto {
@@ -15,6 +15,7 @@ export class CreateQuestionDto {
   difficulty: DifficultyLevel;
 
   @IsString()
+  @MaxLength(5000)
   content: string;
 
   // Lựa chọn cho multiple choice / true-false, null với short answer / essay
@@ -27,5 +28,6 @@ export class CreateQuestionDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   explanation?: string;
 }

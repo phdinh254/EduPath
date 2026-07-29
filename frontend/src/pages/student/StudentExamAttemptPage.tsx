@@ -15,136 +15,9 @@ import { useToast } from '../../components/ToastProvider';
 import { ErrorState, LoadingState } from '../../components/StateViews';
 import { Button } from '../../components/ui/Card';
 import { Calculator } from '../../components/ui/Calculator';
-import { CalculatorIcon, ClockIcon, StarIcon, XIcon } from '../../components/ui/Icons';
-import type { ExamQuestion } from '../../types/api';
-
-function QuestionInput({
-  examQuestion,
-  value,
-  onChange,
-}: {
-  examQuestion: ExamQuestion;
-  value: unknown;
-  onChange: (response: unknown) => void;
-}) {
-  const { question } = examQuestion;
-
-  if (question.type === 'MULTIPLE_CHOICE') {
-    const options = (question.options as string[] | null) ?? [];
-    const selected = (value as { index?: number } | null)?.index;
-    return (
-      <div className="space-y-2">
-        {options.map((option, index) => (
-          <label
-            key={index}
-            className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm transition ${
-              selected === index
-                ? 'border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200'
-                : 'border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60'
-            }`}
-          >
-            <input
-              type="radio"
-              className="accent-indigo-600"
-              checked={selected === index}
-              onChange={() => onChange({ index })}
-              name={`q-${examQuestion.questionId}`}
-            />
-            {option}
-          </label>
-        ))}
-      </div>
-    );
-  }
-
-  if (question.type === 'TRUE_FALSE') {
-    const statements = (value as { statements?: boolean[] } | null)?.statements ?? [false, false, false, false];
-    return (
-      <div className="space-y-2">
-        {statements.map((checked, index) => (
-          <label
-            key={index}
-            className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm transition ${
-              checked
-                ? 'border-indigo-400 bg-indigo-50 text-indigo-800 dark:border-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200'
-                : 'border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60'
-            }`}
-          >
-            <input
-              type="checkbox"
-              className="accent-indigo-600"
-              checked={checked}
-              onChange={(e) => {
-                const next = [...statements];
-                next[index] = e.target.checked;
-                onChange({ statements: next });
-              }}
-            />
-            Ý {String.fromCharCode(97 + index)}
-          </label>
-        ))}
-      </div>
-    );
-  }
-
-  if (question.type === 'SHORT_ANSWER') {
-    return (
-      <input
-        defaultValue={(value as { value?: string } | null)?.value ?? ''}
-        onBlur={(e) => onChange({ value: e.target.value })}
-        className="w-full max-w-sm rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:focus:ring-indigo-500/20"
-        placeholder="Nhập câu trả lời ngắn"
-      />
-    );
-  }
-
-  // ESSAY
-  return (
-    <textarea
-      defaultValue={(value as { text?: string } | null)?.text ?? ''}
-      onBlur={(e) => onChange({ text: e.target.value })}
-      rows={8}
-      className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 dark:border-slate-700 dark:bg-slate-900 dark:focus:ring-indigo-500/20"
-      placeholder="Viết bài làm của bạn ở đây"
-    />
-  );
-}
-
-function QuestionNavButton({
-  index,
-  isCurrent,
-  isAnswered,
-  isStarred,
-  onClick,
-}: {
-  index: number;
-  isCurrent: boolean;
-  isAnswered: boolean;
-  isStarred: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`relative flex h-9 w-9 items-center justify-center rounded-xl text-sm font-medium transition ${
-        isCurrent
-          ? 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-sm'
-          : isAnswered
-            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
-            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-      }`}
-    >
-      {index + 1}
-      {isStarred && <StarIcon className="absolute -right-1 -top-1 h-3 w-3 fill-amber-500 text-amber-500" />}
-    </button>
-  );
-}
-
-function formatTime(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
+import { QuestionInput } from './components/QuestionInput';
+import { QuestionNavGrid } from './components/QuestionNavGrid';
+import { ExamAttemptHeader } from './components/ExamAttemptHeader';
 
 export function StudentExamAttemptPage() {
   const { examId } = useParams<{ examId: string }>();
@@ -317,62 +190,18 @@ export function StudentExamAttemptPage() {
 
   return (
     <div>
-      {/* Thanh trên: thoát, tiêu đề, đồng hồ, máy tính, yêu thích */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/student/exams')}
-            title="Thoát"
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <XIcon className="h-5 w-5" />
-          </button>
-          <div>
-            <p className="font-semibold text-slate-900 dark:text-slate-100">{examQuery.data?.title ?? 'Làm bài thi'}</p>
-            <p className="text-xs text-slate-500">
-              Câu {currentIndex + 1}/{total} · Đã trả lời {answeredCount}/{total}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {remainingSeconds != null && (
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-semibold ${
-                remainingSeconds < 300
-                  ? 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400'
-                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-              }`}
-            >
-              <ClockIcon className="h-4 w-4" />
-              {formatTime(remainingSeconds)}
-            </span>
-          )}
-          <button
-            onClick={() => setShowCalculator((v) => !v)}
-            title="Máy tính"
-            className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
-              showCalculator
-                ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300'
-                : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <CalculatorIcon className="h-5 w-5" />
-          </button>
-          {current && (
-            <button
-              onClick={() => toggleStar(current.questionId)}
-              title="Đánh dấu câu này để xem lại"
-              className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
-                starred.has(current.questionId)
-                  ? 'text-amber-500'
-                  : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <StarIcon className="h-5 w-5" fill={starred.has(current.questionId) ? 'currentColor' : 'none'} />
-            </button>
-          )}
-        </div>
-      </div>
+      <ExamAttemptHeader
+        title={examQuery.data?.title ?? 'Làm bài thi'}
+        currentIndex={currentIndex}
+        total={total}
+        answeredCount={answeredCount}
+        remainingSeconds={remainingSeconds}
+        showCalculator={showCalculator}
+        onToggleCalculator={() => setShowCalculator((v) => !v)}
+        isCurrentStarred={!!current && starred.has(current.questionId)}
+        hasCurrentQuestion={!!current}
+        onToggleStar={() => current && toggleStar(current.questionId)}
+      />
 
       {current && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -416,50 +245,14 @@ export function StudentExamAttemptPage() {
         )}
       </div>
 
-      {/* Lưới điều hướng câu hỏi — gộp theo phần thi nếu đề có nhiều phần (ĐGNL) */}
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Danh sách câu hỏi</p>
-        {sections.length > 1 ? (
-          <div className="space-y-4">
-            {sections.map((section) => {
-              const items = questions
-                .map((eq, index) => ({ eq, index }))
-                .filter(({ eq }) => eq.sectionId === section.id);
-              if (items.length === 0) return null;
-              return (
-                <div key={section.id}>
-                  <p className="mb-2 text-xs font-semibold text-violet-700 dark:text-violet-300">{section.name}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {items.map(({ eq, index }) => (
-                      <QuestionNavButton
-                        key={eq.id}
-                        index={index}
-                        isCurrent={index === currentIndex}
-                        isAnswered={answers[eq.questionId] != null}
-                        isStarred={starred.has(eq.questionId)}
-                        onClick={() => setCurrentIndex(index)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {questions.map((eq, index) => (
-              <QuestionNavButton
-                key={eq.id}
-                index={index}
-                isCurrent={index === currentIndex}
-                isAnswered={answers[eq.questionId] != null}
-                isStarred={starred.has(eq.questionId)}
-                onClick={() => setCurrentIndex(index)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <QuestionNavGrid
+        questions={questions}
+        sections={sections}
+        currentIndex={currentIndex}
+        answers={answers}
+        starred={starred}
+        onSelect={setCurrentIndex}
+      />
 
       {showCalculator && (
         <div className="fixed bottom-6 right-6 z-50">
