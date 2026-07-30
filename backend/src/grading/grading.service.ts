@@ -7,7 +7,13 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { AttemptStatus, QuestionType, Role } from '@prisma/client';
+import {
+  AttemptStatus,
+  OutboxStatus,
+  Prisma,
+  QuestionType,
+  Role,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RoadmapService } from '../roadmap/roadmap.service';
 import { ReadinessService } from '../readiness/readiness.service';
@@ -22,6 +28,7 @@ import {
 } from './grading.utils';
 import {
   GRADE_ESSAY_QUEUE,
+  essayJobId,
   type GradeEssayJobData,
 } from './grading-queue.constants';
 
@@ -194,38 +201,71 @@ Chấm điểm khách quan, công bằng, CHỈ dựa trên nội dung bài làm
       throw new ForbiddenException('Đây không phải lượt làm bài của bạn');
     }
 
-    // Khoá trạng thái bằng một UPDATE nguyên tử có điều kiện (chỉ chuyển được
-    // từ IN_PROGRESS) NGAY TỪ ĐẦU, trước khi chấm — nếu 2 request submit tới
-    // gần như đồng thời (double-click, tự động nộp khi hết giờ trùng lúc học
-    // sinh bấm nộp tay...), chỉ request nào giành được quyền cập nhật
-    // (count=1) mới được chấm/tạo roadmap+readiness; request còn lại thấy
-    // count=0 và dừng ngay, tránh chấm/tạo phân tích lặp.
-    const { count } = await this.prisma.examAttempt.updateMany({
-      where: { id: attemptId, status: AttemptStatus.IN_PROGRESS },
-      data: { status: AttemptStatus.SUBMITTED, submittedAt: new Date() },
-    });
-    if (count === 0) {
-      throw new BadRequestException('Lượt làm bài đã được nộp trước đó');
-    }
-
     const answersByQuestionId = new Map(
       attempt.answers.map((a) => [a.questionId, a]),
     );
+    const pendingEssayJobs: GradeEssayJobData[] = [];
 
-    for (const eq of attempt.exam.examQuestions) {
-      const existingAnswer = answersByQuestionId.get(eq.questionId);
-      const response = existingAnswer?.response ?? null;
+    // Toàn bộ khoá trạng thái (IN_PROGRESS -> SUBMITTED) + ghi điểm đồng bộ
+    // chạy trong MỘT transaction — nếu DB/tiến trình lỗi giữa chừng, Postgres
+    // tự rollback về IN_PROGRESS thay vì để attempt kẹt ở SUBMITTED với một
+    // phần câu đã chấm, phần chưa (xem P0 issue #3). Job chấm tự luận KHÔNG
+    // gọi Redis ở đây — chỉ ghi OutboxEvent trong cùng transaction; enqueue
+    // thật sự diễn ra sau khi transaction commit (bên dưới), để một lỗi Redis
+    // không kéo theo rollback các câu khác đã chấm xong.
+    await this.prisma.$transaction(async (tx) => {
+      // Khoá trạng thái bằng một UPDATE nguyên tử có điều kiện (chỉ chuyển
+      // được từ IN_PROGRESS) NGAY TỪ ĐẦU, trước khi chấm — nếu 2 request
+      // submit tới gần như đồng thời (double-click, tự động nộp khi hết giờ
+      // trùng lúc học sinh bấm nộp tay...), chỉ request nào giành được quyền
+      // cập nhật (count=1) mới được chấm/tạo roadmap+readiness; request còn
+      // lại thấy count=0 và dừng ngay, tránh chấm/tạo phân tích lặp.
+      const { count } = await tx.examAttempt.updateMany({
+        where: { id: attemptId, status: AttemptStatus.IN_PROGRESS },
+        data: { status: AttemptStatus.SUBMITTED, submittedAt: new Date() },
+      });
+      if (count === 0) {
+        throw new BadRequestException('Lượt làm bài đã được nộp trước đó');
+      }
 
-      if (eq.question.type === QuestionType.ESSAY) {
-        const rawText = String(
-          (response as { text?: string } | null)?.text ?? '',
-        ).trim();
-        if (!rawText || !this.gemini.isConfigured()) {
-          // Bài trắng (luôn chấm 0 ngay, không cần AI) hoặc Gemini chưa cấu
-          // hình (không có gì để xếp hàng chờ) — xử lý xong ngay tại đây.
-          const outcome = gradeEssayFallback(response, 'GEMINI_NOT_CONFIGURED');
-          const data = this.essayOutcomeToAnswerData(outcome);
-          await this.prisma.answer.upsert({
+      for (const eq of attempt.exam.examQuestions) {
+        const existingAnswer = answersByQuestionId.get(eq.questionId);
+        const response = existingAnswer?.response ?? null;
+
+        if (eq.question.type === QuestionType.ESSAY) {
+          const rawText = String(
+            (response as { text?: string } | null)?.text ?? '',
+          ).trim();
+          if (!rawText || !this.gemini.isConfigured()) {
+            // Bài trắng (luôn chấm 0 ngay, không cần AI) hoặc Gemini chưa cấu
+            // hình (không có gì để xếp hàng chờ) — xử lý xong ngay tại đây.
+            const outcome = gradeEssayFallback(
+              response,
+              'GEMINI_NOT_CONFIGURED',
+            );
+            const data = this.essayOutcomeToAnswerData(outcome);
+            await tx.answer.upsert({
+              where: {
+                attemptId_questionId: { attemptId, questionId: eq.questionId },
+              },
+              create: {
+                attemptId,
+                questionId: eq.questionId,
+                response: response ?? undefined,
+                ...data,
+              },
+              update: data,
+            });
+            continue;
+          }
+
+          // Có nội dung thật + Gemini đã cấu hình — ghi skeleton câu trả lời
+          // và một OutboxEvent trong transaction này; job BullMQ thật sự được
+          // enqueue sau khi transaction commit (xem vòng lặp pendingEssayJobs
+          // bên dưới). Attempt sẽ ở PENDING_REVIEW cho tới khi job này xong
+          // (xem recomputeScore) — về hành vi với học sinh, giống hệt trường
+          // hợp "chờ ADMIN chấm tay" đã có sẵn.
+          await tx.answer.upsert({
             where: {
               attemptId_questionId: { attemptId, questionId: eq.questionId },
             },
@@ -233,20 +273,51 @@ Chấm điểm khách quan, công bằng, CHỈ dựa trên nội dung bài làm
               attemptId,
               questionId: eq.questionId,
               response: response ?? undefined,
-              ...data,
             },
-            update: data,
+            update: {
+              response: response ?? undefined,
+              scoreAwarded: null,
+              needsManualGrading: false,
+              fallbackReason: null,
+              gradingModel: null,
+              gradingPromptVersion: null,
+              gradedAt: null,
+              aiComment: null,
+              aiPreliminaryScore: null,
+              isAiReferenceOnly: false,
+            },
           });
+
+          const jobData: GradeEssayJobData = {
+            attemptId,
+            questionId: eq.questionId,
+            questionContent: eq.question.content,
+            maxScore: eq.maxScore,
+          };
+          await tx.outboxEvent.create({
+            data: {
+              jobId: essayJobId(attemptId, eq.questionId),
+              type: GRADE_ESSAY_QUEUE,
+              payload: jobData as unknown as Prisma.InputJsonValue,
+            },
+          });
+          pendingEssayJobs.push(jobData);
           continue;
         }
 
-        // Có nội dung thật + Gemini đã cấu hình — xếp hàng chấm nền qua
-        // BullMQ (retry/backoff/giới hạn concurrency riêng, xem
-        // GradeEssayProcessor) thay vì chặn response nộp bài chờ Gemini trả
-        // lời. Attempt sẽ ở PENDING_REVIEW cho tới khi job này xong (xem
-        // recomputeScore) — về hành vi với học sinh, giống hệt trường hợp
-        // "chờ ADMIN chấm tay" đã có sẵn.
-        await this.prisma.answer.upsert({
+        const grader =
+          eq.question.type === QuestionType.MULTIPLE_CHOICE
+            ? gradeMultipleChoice
+            : eq.question.type === QuestionType.TRUE_FALSE
+              ? gradeTrueFalse
+              : gradeShortAnswer;
+        const { isCorrect, scoreAwarded } = grader(
+          response,
+          eq.question.correctAnswer,
+          eq.maxScore,
+        );
+
+        await tx.answer.upsert({
           where: {
             attemptId_questionId: { attemptId, questionId: eq.questionId },
           },
@@ -254,57 +325,81 @@ Chấm điểm khách quan, công bằng, CHỈ dựa trên nội dung bài làm
             attemptId,
             questionId: eq.questionId,
             response: response ?? undefined,
+            isCorrect,
+            scoreAwarded,
           },
-          update: {
-            response: response ?? undefined,
-            scoreAwarded: null,
-            needsManualGrading: false,
-            fallbackReason: null,
-            gradingModel: null,
-            gradingPromptVersion: null,
-            gradedAt: null,
-            aiComment: null,
-            aiPreliminaryScore: null,
-            isAiReferenceOnly: false,
-          },
+          update: { isCorrect, scoreAwarded },
         });
-        await this.gradeEssayQueue.add('grade-essay', {
-          attemptId,
-          questionId: eq.questionId,
-          questionContent: eq.question.content,
-          maxScore: eq.maxScore,
-        });
-        continue;
       }
+    });
 
-      const grader =
-        eq.question.type === QuestionType.MULTIPLE_CHOICE
-          ? gradeMultipleChoice
-          : eq.question.type === QuestionType.TRUE_FALSE
-            ? gradeTrueFalse
-            : gradeShortAnswer;
-      const { isCorrect, scoreAwarded } = grader(
-        response,
-        eq.question.correctAnswer,
-        eq.maxScore,
-      );
-
-      await this.prisma.answer.upsert({
-        where: {
-          attemptId_questionId: { attemptId, questionId: eq.questionId },
-        },
-        create: {
-          attemptId,
-          questionId: eq.questionId,
-          response: response ?? undefined,
-          isCorrect,
-          scoreAwarded,
-        },
-        update: { isCorrect, scoreAwarded },
-      });
+    // Transaction đã commit — DB đã nhất quán dù bước enqueue dưới đây có lỗi
+    // hay không. Nếu Redis tạm thời không tới được, OutboxEvent vẫn ở PENDING
+    // và OutboxSweepProcessor (chạy định kỳ, xem outbox-sweep.processor.ts)
+    // sẽ tự phát lại — học sinh không cần nộp lại bài.
+    for (const jobData of pendingEssayJobs) {
+      await this.enqueueEssayGradingJob(jobData);
     }
 
     return this.recomputeScore(attemptId);
+  }
+
+  private async enqueueEssayGradingJob(
+    jobData: GradeEssayJobData,
+  ): Promise<void> {
+    const jobId = essayJobId(jobData.attemptId, jobData.questionId);
+    try {
+      await this.gradeEssayQueue.add('grade-essay', jobData, { jobId });
+      await this.prisma.outboxEvent.updateMany({
+        where: { jobId, status: OutboxStatus.PENDING },
+        data: { status: OutboxStatus.PROCESSED, processedAt: new Date() },
+      });
+    } catch {
+      // Redis lỗi/timeout — để nguyên PENDING, OutboxSweepProcessor sẽ phát
+      // lại ở lượt quét kế tiếp. Không throw ra ngoài: DB đã nhất quán rồi,
+      // học sinh không cần biết/không cần làm gì thêm.
+    }
+  }
+
+  // Gọi định kỳ từ OutboxSweepProcessor — phát lại mọi OutboxEvent còn PENDING
+  // quá `olderThanMs` (nghĩa là enqueueEssayGradingJob ở submitAttempt đã
+  // từng thử và lỗi, hoặc tiến trình chết trước khi kịp gọi nó).
+  async recoverPendingOutboxEvents(olderThanMs = 30_000): Promise<number> {
+    const stale = await this.prisma.outboxEvent.findMany({
+      where: {
+        status: OutboxStatus.PENDING,
+        createdAt: { lt: new Date(Date.now() - olderThanMs) },
+      },
+      take: 100,
+    });
+    for (const event of stale) {
+      if (event.type !== GRADE_ESSAY_QUEUE) continue;
+      await this.enqueueEssayGradingJob(
+        event.payload as unknown as GradeEssayJobData,
+      );
+    }
+    return stale.length;
+  }
+
+  // Gọi định kỳ từ OutboxSweepProcessor — status=SUBMITTED nghĩa là
+  // transaction chấm đồng bộ trong submitAttempt đã commit xong (mọi Answer
+  // đã ghi đúng, mọi OutboxEvent cần thiết đã tồn tại); chỉ còn khả năng tiến
+  // trình chết NGAY SAU khi transaction commit, trước khi kịp gọi
+  // recomputeScore() ở cuối submitAttempt. Gọi lại recomputeScore() là an
+  // toàn tuyệt đối vì nó chỉ ĐỌC lại Answer hiện có, không chấm lại gì cả.
+  async recoverStuckSubmissions(olderThanMs = 5 * 60_000): Promise<number> {
+    const stuck = await this.prisma.examAttempt.findMany({
+      where: {
+        status: AttemptStatus.SUBMITTED,
+        submittedAt: { lt: new Date(Date.now() - olderThanMs) },
+      },
+      select: { id: true },
+      take: 100,
+    });
+    for (const attempt of stuck) {
+      await this.recomputeScore(attempt.id);
+    }
+    return stuck.length;
   }
 
   // Câu tự luận ADMIN cần xem qua: gồm 2 loại, phân biệt bằng needsManualGrading —
@@ -537,7 +632,7 @@ Trả lời bằng 2-4 câu văn tiếng Việt thuần, không dùng định d�
     return { aiExplanation };
   }
 
-  private async recomputeScore(attemptId: string) {
+  async recomputeScore(attemptId: string) {
     const answers = await this.prisma.answer.findMany({
       where: { attemptId },
       include: { question: true },

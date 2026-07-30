@@ -15,11 +15,16 @@ function lastCallArg(
 }
 
 function makeService() {
-  const prisma = {
+  // Khai báo riêng (không tự tham chiếu chính nó) để TypeScript suy luận
+  // đúng kiểu cho từng jest.fn() — một object literal tự tham chiếu trong
+  // lúc khai báo (vd. $transaction: jest.fn((fn) => fn(prisma)) ngay trong
+  // literal của prisma) khiến TS rơi về `any` cho toàn bộ object.
+  const prismaMethods = {
     examAttempt: {
       findUnique: jest.fn(),
       updateMany: jest.fn(),
       update: jest.fn(),
+      findMany: jest.fn(),
     },
     answer: {
       upsert: jest.fn(),
@@ -28,6 +33,21 @@ function makeService() {
       update: jest.fn(),
     },
     score: { upsert: jest.fn() },
+    outboxEvent: {
+      create: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn(),
+    },
+  };
+  const prisma = {
+    ...prismaMethods,
+    // Interactive transaction client (`tx`) dùng đúng những method name như
+    // client top-level (xem GradingService.submitAttempt) — trả về chính
+    // `prismaMethods` cho callback là đủ để test assert như cũ trên
+    // `prisma.examAttempt.updateMany` v.v.
+    $transaction: jest.fn((fn: (tx: typeof prismaMethods) => unknown) =>
+      fn(prismaMethods),
+    ),
   };
   const roadmapService = {
     generateForAttempt: jest.fn().mockResolvedValue(undefined),
@@ -242,12 +262,33 @@ describe('GradingService.submitAttempt — chấm tự luận', () => {
     await service.submitAttempt('attempt-3', student);
 
     expect(gemini.generateJson).not.toHaveBeenCalled();
-    expect(gradeEssayQueue.add).toHaveBeenCalledWith('grade-essay', {
-      attemptId: 'attempt-3',
-      questionId: 'q-essay',
-      questionContent: 'Đề bài Đọc hiểu + Viết',
-      maxScore: 10,
+    const outboxCreateData = lastCallArg(prisma.outboxEvent.create, 'data');
+    expect(outboxCreateData).toMatchObject({
+      jobId: 'grade-essay:attempt-3:q-essay',
+      type: 'grade-essay',
+      payload: {
+        attemptId: 'attempt-3',
+        questionId: 'q-essay',
+        questionContent: 'Đề bài Đọc hiểu + Viết',
+        maxScore: 10,
+      },
     });
+    expect(gradeEssayQueue.add).toHaveBeenCalledWith(
+      'grade-essay',
+      {
+        attemptId: 'attempt-3',
+        questionId: 'q-essay',
+        questionContent: 'Đề bài Đọc hiểu + Viết',
+        maxScore: 10,
+      },
+      { jobId: 'grade-essay:attempt-3:q-essay' },
+    );
+    const outboxUpdateManyData = lastCallArg(
+      prisma.outboxEvent.updateMany,
+      'data',
+    );
+    expect(outboxUpdateManyData.status).toBe('PROCESSED');
+    expect(outboxUpdateManyData.processedAt).toBeInstanceOf(Date);
     expect(lastCallArg(prisma.answer.upsert, 'update')).toMatchObject({
       scoreAwarded: null,
       needsManualGrading: false,
