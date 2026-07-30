@@ -10,6 +10,14 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().port().default(3000),
 
+  // Số hop reverse proxy đứng trước backend mà ta TIN để đọc IP client thật
+  // từ X-Forwarded-For (xem main.ts) — mặc định 1 khớp kiến trúc hiện tại
+  // (chỉ Nginx đứng trước, xem devops/docker-compose.prod.yml). Sai số này
+  // theo hướng thấp là an toàn hơn (rate limit vẫn áp đúng theo IP Nginx thay
+  // vì bị spoof), nhưng phải tăng lên nếu thêm một reverse proxy/LB nữa phía
+  // trước Nginx (ví dụ Caddy làm TLS termination — xem devops/Caddyfile).
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).default(1),
+
   DATABASE_URL: Joi.string().uri().required(),
 
   // Redis cho hàng đợi BullMQ (chấm tự luận, sinh câu hỏi, lời khuyên AI) —

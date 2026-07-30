@@ -19,6 +19,15 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const isProduction = config.get<string>('NODE_ENV') === 'production';
 
+  // Nginx (và, khi bật HTTPS, Caddy đứng trước Nginx — xem devops/Caddyfile)
+  // là (các) reverse proxy DUY NHẤT phép tin — nếu không khai báo, Express
+  // coi socket kết nối trực tiếp (luôn là Nginx trong container) là "client",
+  // nên req.ip là IP nội bộ của Nginx cho MỌI người dùng thật. ThrottlerGuard
+  // (xem AppThrottlerGuard) dựa vào req.ip, nên hậu quả là rate limit áp dụng
+  // DÙNG CHUNG một bộ đếm cho toàn bộ traffic production — 5 request đăng
+  // ký/đăng nhập của BẤT KỲ ai trong 1 phút khoá tạm luôn cả những người khác.
+  app.set('trust proxy', config.get<number>('TRUST_PROXY_HOPS'));
+
   // Giới hạn kích thước request — đủ chỗ cho văn bản đề thi thật ADMIN dán
   // vào (xem ParseExamImportDto, tối đa 20k ký tự) nhưng chặn payload khổng
   // lồ cố tình gửi lên để tốn tài nguyên parse/băng thông.
