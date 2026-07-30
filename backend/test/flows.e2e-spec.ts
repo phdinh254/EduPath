@@ -568,4 +568,51 @@ describe('Core flows (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(400);
   });
+
+  it('14: manual question creation validates structure for all question types, not just TRUE_FALSE', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin14_${suffix}@test.dev`,
+    );
+    const subjectRes = await request(server())
+      .post('/subjects')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ code: `QS${suffix}`, name: 'QS subject' })
+      .expect(201);
+    const subject = body<IdBody>(subjectRes);
+    const topicRes = await request(server())
+      .post(`/subjects/${subject.id}/topics`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'QS topic' })
+      .expect(201);
+    const topic = body<IdBody>(topicRes);
+
+    // MULTIPLE_CHOICE với correctAnswer.index ngoài khoảng options -> 400.
+    await request(server())
+      .post('/questions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        subjectId: subject.id,
+        topicId: topic.id,
+        type: 'MULTIPLE_CHOICE',
+        difficulty: 'KNOWLEDGE',
+        content: 'bad mc',
+        options: ['a', 'b'],
+        correctAnswer: { index: 5 },
+      })
+      .expect(400);
+
+    // SHORT_ANSWER thiếu correctAnswer.value -> 400.
+    await request(server())
+      .post('/questions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        subjectId: subject.id,
+        topicId: topic.id,
+        type: 'SHORT_ANSWER',
+        difficulty: 'KNOWLEDGE',
+        content: 'bad short answer',
+        correctAnswer: {},
+      })
+      .expect(400);
+  });
 });

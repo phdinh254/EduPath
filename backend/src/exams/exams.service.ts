@@ -83,6 +83,24 @@ export class ExamsService {
         'Đề chưa có câu hỏi nào — thêm câu hỏi trước khi publish',
       );
     }
+
+    // Đề ĐGNL gồm nhiều section theo môn (xem ExamSection) — một section
+    // không có câu hỏi nào vẫn để questionCount tổng > 0 lọt qua kiểm tra ở
+    // trên, nhưng học sinh sẽ gặp một phần đề trống khi làm bài. Chặn publish
+    // cho tới khi mọi section đều có ít nhất 1 câu.
+    if (exam.category === ExamCategory.DGNL) {
+      const sections = await this.prisma.examSection.findMany({
+        where: { examId },
+        include: { _count: { select: { examQuestions: true } } },
+      });
+      const emptySection = sections.find((s) => s._count.examQuestions === 0);
+      if (emptySection) {
+        throw new BadRequestException(
+          `Section "${emptySection.name}" chưa có câu hỏi nào — thêm câu hỏi trước khi publish`,
+        );
+      }
+    }
+
     return this.prisma.exam.update({
       where: { id: examId },
       data: { status: ExamPublishStatus.PUBLISHED },
