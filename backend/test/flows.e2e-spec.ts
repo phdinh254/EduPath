@@ -140,6 +140,13 @@ describe('Core flows (e2e)', () => {
       .send({ questionId: question.id, order: 1, maxScore: 0.25 })
       .expect(201);
 
+    // Đề mới tạo thủ công luôn bắt đầu ở DRAFT (xem exams.controller.ts) —
+    // phải publish trước khi học sinh có thể bắt đầu làm bài.
+    await request(server())
+      .post(`/exams/${exam.id}/publish`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(201);
+
     // Bất kỳ học sinh nào cũng truy cập được đề đã tồn tại — không còn giới hạn theo lớp.
     const attemptRes = await request(server())
       .post(`/exams/${exam.id}/attempts`)
@@ -247,6 +254,10 @@ describe('Core flows (e2e)', () => {
       .post(`/exams/${exam.id}/questions`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ questionId: essayQuestion.id, order: 1, maxScore: 3 })
+      .expect(201);
+    await request(server())
+      .post(`/exams/${exam.id}/publish`)
+      .set('Authorization', `Bearer ${adminToken}`)
       .expect(201);
 
     const attemptRes = await request(server())
@@ -364,6 +375,10 @@ describe('Core flows (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ questionId: q2.id, order: 2, maxScore: 0.25 })
       .expect(201);
+    await request(server())
+      .post(`/exams/${exam.id}/publish`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(201);
 
     const attemptRes = await request(server())
       .post(`/exams/${exam.id}/attempts`)
@@ -425,5 +440,67 @@ describe('Core flows (e2e)', () => {
 
     // Không có token -> 401
     await request(server()).get('/admin/stats').expect(401);
+  });
+
+  it('10: a DRAFT exam cannot be started by a student (404) until published', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin10_${suffix}@test.dev`,
+    );
+    const { accessToken: studentToken } = await register({
+      email: `student10_${suffix}@test.dev`,
+      password: 'password123',
+      fullName: 'Student Ten',
+    });
+
+    const subjectRes = await request(server())
+      .post('/subjects')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ code: `DRAFT${suffix}`, name: 'Draft subject' })
+      .expect(201);
+    const subject = body<IdBody>(subjectRes);
+    const topicRes = await request(server())
+      .post(`/subjects/${subject.id}/topics`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Draft topic' })
+      .expect(201);
+    const topic = body<IdBody>(topicRes);
+    const questionRes = await request(server())
+      .post('/questions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        subjectId: subject.id,
+        topicId: topic.id,
+        type: 'MULTIPLE_CHOICE',
+        difficulty: 'KNOWLEDGE',
+        content: 'draft question',
+        options: ['a', 'b'],
+        correctAnswer: { index: 1 },
+      })
+      .expect(201);
+    const question = body<IdBody>(questionRes);
+
+    const examRes = await request(server())
+      .post('/exams')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ title: 'Draft exam', subjectId: subject.id, durationMinutes: 10 })
+      .expect(201);
+    const exam = body<IdBody>(examRes);
+    await request(server())
+      .post(`/exams/${exam.id}/questions`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ questionId: question.id, order: 1, maxScore: 0.25 })
+      .expect(201);
+
+    // Chưa publish — học sinh không thấy đề này tồn tại.
+    await request(server())
+      .post(`/exams/${exam.id}/attempts`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(404);
+
+    // ADMIN vẫn thấy được đề DRAFT của mình (để tiếp tục soạn).
+    await request(server())
+      .get(`/exams/${exam.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
   });
 });
