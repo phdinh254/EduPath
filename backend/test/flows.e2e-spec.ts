@@ -503,4 +503,36 @@ describe('Core flows (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
   });
+
+  it('11: email is normalized (trim+lowercase) for register and login', async () => {
+    const rawEmail = `  Student11_${suffix}@Test.DEV  `;
+    await request(server())
+      .post('/auth/register')
+      .send({
+        email: rawEmail,
+        password: 'password123',
+        fullName: 'Student Eleven',
+      })
+      .expect(201);
+
+    // Đăng ký lần 2 với cùng email nhưng khác hoa/thường + khoảng trắng phải
+    // bị coi là trùng (409), không tạo được tài khoản thứ hai.
+    await request(server())
+      .post('/auth/register')
+      .send({
+        email: `student11_${suffix}@test.dev`,
+        password: 'password123',
+        fullName: 'Student Eleven Duplicate',
+      })
+      .expect(409);
+
+    // Đăng nhập lại bằng biến thể hoa/thường + khoảng trắng khác phải thành công.
+    await request(server())
+      .post('/auth/login')
+      .send({
+        email: `STUDENT11_${suffix}@test.dev`,
+        password: 'password123',
+      })
+      .expect(200);
+  });
 });
