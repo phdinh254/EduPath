@@ -30,9 +30,14 @@ import type { GoogleProfile } from './strategies/google.strategy';
 import { OAuthExchangeService } from './oauth-exchange.service';
 
 const REFRESH_COOKIE_NAME = 'refreshToken';
-// Khớp path thật của endpoint refresh/logout — cookie không bị gửi kèm mọi
-// request khác, giảm bề mặt lộ nếu có XSS ở phần khác của SPA.
-const REFRESH_COOKIE_PATH = '/auth';
+// Path phải khớp với path MÀ TRÌNH DUYỆT THẤY, không phải route thật trên
+// backend: cả Vite dev proxy (vite.config.ts) lẫn Nginx production
+// (frontend/nginx.conf) expose API dưới prefix "/api/" rồi mới rewrite bỏ
+// "/api" khi forward sang backend. Nếu để "/auth" (route thật, không prefix),
+// trình duyệt không bao giờ thấy request nào khớp path đó (chỉ gọi
+// "/api/auth/..."), nên sẽ không bao giờ gửi lại cookie — /auth/refresh luôn
+// 401 "Không tìm thấy refresh token" ngay sau khi đăng nhập.
+const REFRESH_COOKIE_PATH = '/api/auth';
 
 @ApiTags('auth')
 @Controller('auth')
