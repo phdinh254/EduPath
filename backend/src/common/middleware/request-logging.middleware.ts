@@ -20,15 +20,28 @@ export function requestLoggingMiddleware(
 
   const startedAt = Date.now();
   res.on('finish', () => {
-    logger.log(
-      JSON.stringify({
-        requestId,
-        method: req.method,
-        path: req.originalUrl,
-        statusCode: res.statusCode,
-        durationMs: Date.now() - startedAt,
-      }),
-    );
+    // originalUrl có thể chứa query string nhạy cảm (vd. ?code=...&state=...
+    // của OAuth callback Google, xem AuthController.googleCallback) — chỉ log
+    // path, không log query string.
+    const path = req.originalUrl.split('?')[0];
+    const entry = {
+      requestId,
+      method: req.method,
+      path,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+    };
+    // 5xx là lỗi hệ thống thật sự (đáng alert) — 4xx thường là lỗi phía
+    // client (401 sai mật khẩu, 404 route không tồn tại...) và xảy ra liên
+    // tục trong vận hành bình thường, không nên cùng mức độ nghiêm trọng với
+    // 5xx trên dashboard log.
+    if (res.statusCode >= 500) {
+      logger.error(JSON.stringify(entry));
+    } else if (res.statusCode >= 400) {
+      logger.warn(JSON.stringify(entry));
+    } else {
+      logger.log(JSON.stringify(entry));
+    }
   });
 
   next();

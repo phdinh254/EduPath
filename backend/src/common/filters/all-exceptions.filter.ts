@@ -42,21 +42,30 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ? exception.message
       : String((exception as Error | undefined)?.message ?? exception);
 
-    this.logger.error(
-      JSON.stringify({
-        requestId,
-        method: request.method,
-        path: request.originalUrl,
-        statusCode: status,
-        message,
-        // Chỉ log stack cho lỗi 5xx thật sự — lỗi 4xx (validation, quyền hạn...)
-        // là hành vi nghiệp vụ bình thường, không phải bug cần điều tra.
-        stack:
-          status >= 500 && exception instanceof Error
-            ? exception.stack
-            : undefined,
-      }),
-    );
+    // originalUrl có thể chứa query string nhạy cảm (vd. ?code=...&state=...
+    // của OAuth callback Google) — chỉ log path, không log query string
+    // (khớp requestLoggingMiddleware).
+    const path = request.originalUrl.split('?')[0];
+    const entry = {
+      requestId,
+      method: request.method,
+      path,
+      statusCode: status,
+      message,
+      // Chỉ log stack cho lỗi 5xx thật sự — lỗi 4xx (validation, quyền hạn...)
+      // là hành vi nghiệp vụ bình thường, không phải bug cần điều tra.
+      stack:
+        status >= 500 && exception instanceof Error
+          ? exception.stack
+          : undefined,
+    };
+    // 5xx là lỗi hệ thống thật sự (đáng alert) — 4xx là lỗi phía client và
+    // xảy ra liên tục trong vận hành bình thường (khớp requestLoggingMiddleware).
+    if (status >= 500) {
+      this.logger.error(JSON.stringify(entry));
+    } else {
+      this.logger.warn(JSON.stringify(entry));
+    }
 
     response.status(status).json(payload);
   }
