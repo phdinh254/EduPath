@@ -9,6 +9,7 @@ import {
   registerFactory,
   TokenBody,
 } from './utils';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 // Bộ test bao phủ các luồng cốt lõi của mô hình B2C thuần: đăng ký luôn tạo
 // STUDENT, ADMIN quản lý toàn bộ nội dung, học sinh tự chọn đề thi để làm
@@ -534,5 +535,21 @@ describe('Core flows (e2e)', () => {
         password: 'password123',
       })
       .expect(200);
+  });
+
+  it('12: a deactivated account cannot log in', async () => {
+    const email = `student12_${suffix}@test.dev`;
+    await request(server())
+      .post('/auth/register')
+      .send({ email, password: 'password123', fullName: 'Student Twelve' })
+      .expect(201);
+
+    const prisma = app.get(PrismaService);
+    await prisma.user.update({ where: { email }, data: { isActive: false } });
+
+    await request(server())
+      .post('/auth/login')
+      .send({ email, password: 'password123' })
+      .expect(401);
   });
 });

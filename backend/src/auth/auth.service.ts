@@ -83,6 +83,13 @@ export class AuthService {
         data: { failedLoginAttempts: 0, lockedUntil: null },
       });
     }
+
+    // Kiểm tra SAU khi xác nhận mật khẩu đúng (không phải trước) — khớp cách
+    // loginWithGoogle()/refresh() đã làm, và tránh lộ qua thông báo lỗi khác
+    // nhau việc một email có tồn tại tài khoản bị vô hiệu hoá hay không.
+    if (!user.isActive) {
+      throw new UnauthorizedException('Tài khoản không còn hoạt động');
+    }
     return this.buildTokens(user.id, user.email, user.role);
   }
 
