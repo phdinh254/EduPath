@@ -61,6 +61,11 @@ enum AttemptStatus {
   GRADED
 }
 
+enum OutboxStatus {
+  PENDING
+  PROCESSED
+}
+
 enum RoadmapStatus {
   ACTIVE
   COMPLETED
@@ -434,6 +439,24 @@ model Answer {
 
   @@unique([attemptId, questionId])
   @@index([attemptId])
+}
+
+// Đảm bảo việc phát job chấm tự luận qua Redis/BullMQ sống sót qua lỗi
+// Redis hoặc lỗi tiến trình xảy ra giữa lúc nộp bài — ghi trong CÙNG
+// transaction với các upsert Answer khác (xem GradingService.submitAttempt),
+// enqueue thật sự CHỈ sau khi transaction đó commit. jobId trùng với jobId
+// BullMQ tương ứng nên OutboxSweepProcessor phát lại một sự kiện PENDING
+// không bao giờ tạo job trùng (BullMQ tự chặn theo jobId).
+model OutboxEvent {
+  id          String       @id @default(cuid())
+  jobId       String       @unique
+  type        String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  processedAt DateTime?
+
+  @@index([status, createdAt])
 }
 
 // ADMIN điều chỉnh lại điểm AI đã công bố cho câu tự luận (hậu kiểm chất lượng).
