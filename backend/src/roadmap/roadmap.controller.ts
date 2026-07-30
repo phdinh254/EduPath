@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Patch, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  ParseEnumPipe,
+  Patch,
+  Query,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -68,7 +75,8 @@ export class RoadmapController {
   findMyRoadmap(
     @CurrentUser() user: JwtPayload,
     @Query('subjectId') subjectId?: string,
-    @Query('status') status?: RoadmapStatus,
+    @Query('status', new ParseEnumPipe(RoadmapStatus, { optional: true }))
+    status?: RoadmapStatus,
   ) {
     return this.roadmapService.findRoadmapForStudent(
       user.sub,

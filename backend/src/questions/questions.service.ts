@@ -82,21 +82,58 @@ function isStructurallyValid(
   return false;
 }
 
-function assertValidTrueFalse(dto: {
+// ADMIN tạo câu hỏi thủ công qua create() KHÔNG đi qua isStructurallyValid()
+// (hàm đó chỉ áp dụng cho luồng AI sinh — xem generateBatch/
+// processGenerateQuestionsJob), nên trước đây chỉ TRUE_FALSE được ràng buộc
+// cấu trúc đáp án. Một câu MULTIPLE_CHOICE thiếu options hoặc correctAnswer
+// .index ngoài khoảng, hay SHORT_ANSWER thiếu correctAnswer.value, vẫn được
+// lưu — và chỉ vỡ ra khi học sinh làm bài, lúc grading.utils không chấm được.
+// Ràng buộc ngay tại thời điểm tạo, cho MỌI loại câu hỏi.
+function assertValidQuestionStructure(dto: {
   type: QuestionType;
+  options?: unknown;
   correctAnswer?: unknown;
 }) {
-  if (dto.type !== QuestionType.TRUE_FALSE) return;
-  // Thang điểm lũy tiến (0.1/0.25/0.5/1) chỉ đúng chuẩn Bộ GD&ĐT khi câu có
-  // đúng 4 ý — xem grading.utils.ts. Sai số ý sẽ âm thầm rơi về tính tuyến
-  // tính, nên phải chặn ngay từ lúc tạo câu hỏi.
-  const statements = (dto.correctAnswer as { statements?: unknown } | null)
-    ?.statements;
-  if (!Array.isArray(statements) || statements.length !== 4) {
-    throw new BadRequestException(
-      'Câu đúng/sai phải có đúng 4 ý (correctAnswer.statements)',
-    );
+  if (dto.type === QuestionType.MULTIPLE_CHOICE) {
+    const options = dto.options;
+    const correct = (dto.correctAnswer as { index?: number } | null)?.index;
+    const valid =
+      Array.isArray(options) &&
+      options.length >= 2 &&
+      typeof correct === 'number' &&
+      correct >= 0 &&
+      correct < options.length;
+    if (!valid) {
+      throw new BadRequestException(
+        'Câu trắc nghiệm cần ít nhất 2 lựa chọn (options) và correctAnswer.index hợp lệ trong khoảng đó',
+      );
+    }
+    return;
   }
+  if (dto.type === QuestionType.TRUE_FALSE) {
+    // Thang điểm lũy tiến (0.1/0.25/0.5/1) chỉ đúng chuẩn Bộ GD&ĐT khi câu có
+    // đúng 4 ý — xem grading.utils.ts. Sai số ý sẽ âm thầm rơi về tính tuyến
+    // tính, nên phải chặn ngay từ lúc tạo câu hỏi.
+    const statements = (dto.correctAnswer as { statements?: unknown } | null)
+      ?.statements;
+    if (!Array.isArray(statements) || statements.length !== 4) {
+      throw new BadRequestException(
+        'Câu đúng/sai phải có đúng 4 ý (correctAnswer.statements)',
+      );
+    }
+    return;
+  }
+  if (dto.type === QuestionType.SHORT_ANSWER) {
+    const value = (dto.correctAnswer as { value?: string } | null)?.value;
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new BadRequestException(
+        'Câu trả lời ngắn cần correctAnswer.value không rỗng',
+      );
+    }
+    return;
+  }
+  // ESSAY: không có đáp án đúng cố định (chấm bởi AI/ADMIN) — không ràng
+  // buộc gì thêm, khớp isStructurallyValid().
 }
 
 @Injectable()
@@ -141,7 +178,7 @@ export class QuestionsService {
   // Nội dung do ADMIN tạo thủ công luôn vào thẳng kho dùng chung, vì ADMIN là
   // bên duyệt nội dung cuối cùng.
   create(user: JwtPayload, dto: CreateQuestionDto) {
-    assertValidTrueFalse(dto);
+    assertValidQuestionStructure(dto);
     return this.prisma.question.create({
       data: {
         ...dto,
@@ -391,7 +428,7 @@ export class QuestionsService {
           `Chuyên đề ${q.topicId} không thuộc môn học này`,
         );
       }
-      assertValidTrueFalse(q);
+      assertValidQuestionStructure(q);
     }
 
     return this.prisma.question.createMany({

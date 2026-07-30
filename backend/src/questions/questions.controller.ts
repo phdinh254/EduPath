@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseEnumPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
@@ -106,7 +114,8 @@ export class QuestionsController {
   })
   @ApiResponse({ status: 200, description: 'Danh sách câu hỏi có phân trang.' })
   findAll(
-    @Query('status') status: ContentStatus | undefined,
+    @Query('status', new ParseEnumPipe(ContentStatus, { optional: true }))
+    status: ContentStatus | undefined,
     @Query() pagination: PaginationQueryDto,
   ) {
     return this.questionsService.findAll(

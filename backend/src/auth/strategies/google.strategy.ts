@@ -43,7 +43,11 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     profile: Profile,
     done: VerifyCallback,
   ) {
-    const email = profile.emails?.[0]?.value;
+    // Chuẩn hoá giống RegisterDto/LoginDto — email từ Google profile không đi
+    // qua ValidationPipe/DTO nên phải tự trim+lowercase ở đây để khớp với tài
+    // khoản đã đăng ký bằng mật khẩu dùng cùng email nhưng khác hoa/thường.
+    const rawEmail = profile.emails?.[0]?.value;
+    const email = rawEmail?.trim().toLowerCase();
     if (!email) {
       done(new Error('Tài khoản Google không có email công khai'), false);
       return;

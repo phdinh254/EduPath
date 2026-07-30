@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseEnumPipe,
   Patch,
   Query,
 } from '@nestjs/common';
@@ -69,7 +70,8 @@ export class UsersController {
   })
   @ApiResponse({ status: 403, description: 'Không phải ADMIN.' })
   findAll(
-    @Query('role') role: Role | undefined,
+    @Query('role', new ParseEnumPipe(Role, { optional: true }))
+    role: Role | undefined,
     @Query() pagination: PaginationQueryDto,
   ) {
     return this.usersService.findAll(role, pagination.page, pagination.limit);

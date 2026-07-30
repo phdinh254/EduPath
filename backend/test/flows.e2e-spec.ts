@@ -9,6 +9,7 @@ import {
   registerFactory,
   TokenBody,
 } from './utils';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 // Bộ test bao phủ các luồng cốt lõi của mô hình B2C thuần: đăng ký luôn tạo
 // STUDENT, ADMIN quản lý toàn bộ nội dung, học sinh tự chọn đề thi để làm
@@ -502,5 +503,116 @@ describe('Core flows (e2e)', () => {
       .get(`/exams/${exam.id}`)
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
+  });
+
+  it('11: email is normalized (trim+lowercase) for register and login', async () => {
+    const rawEmail = `  Student11_${suffix}@Test.DEV  `;
+    await request(server())
+      .post('/auth/register')
+      .send({
+        email: rawEmail,
+        password: 'password123',
+        fullName: 'Student Eleven',
+      })
+      .expect(201);
+
+    // Đăng ký lần 2 với cùng email nhưng khác hoa/thường + khoảng trắng phải
+    // bị coi là trùng (409), không tạo được tài khoản thứ hai.
+    await request(server())
+      .post('/auth/register')
+      .send({
+        email: `student11_${suffix}@test.dev`,
+        password: 'password123',
+        fullName: 'Student Eleven Duplicate',
+      })
+      .expect(409);
+
+    // Đăng nhập lại bằng biến thể hoa/thường + khoảng trắng khác phải thành công.
+    await request(server())
+      .post('/auth/login')
+      .send({
+        email: `STUDENT11_${suffix}@test.dev`,
+        password: 'password123',
+      })
+      .expect(200);
+  });
+
+  it('12: a deactivated account cannot log in', async () => {
+    const email = `student12_${suffix}@test.dev`;
+    await request(server())
+      .post('/auth/register')
+      .send({ email, password: 'password123', fullName: 'Student Twelve' })
+      .expect(201);
+
+    const prisma = app.get(PrismaService);
+    await prisma.user.update({ where: { email }, data: { isActive: false } });
+
+    await request(server())
+      .post('/auth/login')
+      .send({ email, password: 'password123' })
+      .expect(401);
+  });
+
+  it('13: an invalid enum query param returns 400, not a raw Prisma error', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin13_${suffix}@test.dev`,
+    );
+
+    await request(server())
+      .get('/users?role=NOT_A_REAL_ROLE')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(400);
+
+    await request(server())
+      .get('/questions?status=NOT_A_REAL_STATUS')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(400);
+  });
+
+  it('14: manual question creation validates structure for all question types, not just TRUE_FALSE', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin14_${suffix}@test.dev`,
+    );
+    const subjectRes = await request(server())
+      .post('/subjects')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ code: `QS${suffix}`, name: 'QS subject' })
+      .expect(201);
+    const subject = body<IdBody>(subjectRes);
+    const topicRes = await request(server())
+      .post(`/subjects/${subject.id}/topics`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'QS topic' })
+      .expect(201);
+    const topic = body<IdBody>(topicRes);
+
+    // MULTIPLE_CHOICE với correctAnswer.index ngoài khoảng options -> 400.
+    await request(server())
+      .post('/questions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        subjectId: subject.id,
+        topicId: topic.id,
+        type: 'MULTIPLE_CHOICE',
+        difficulty: 'KNOWLEDGE',
+        content: 'bad mc',
+        options: ['a', 'b'],
+        correctAnswer: { index: 5 },
+      })
+      .expect(400);
+
+    // SHORT_ANSWER thiếu correctAnswer.value -> 400.
+    await request(server())
+      .post('/questions')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        subjectId: subject.id,
+        topicId: topic.id,
+        type: 'SHORT_ANSWER',
+        difficulty: 'KNOWLEDGE',
+        content: 'bad short answer',
+        correctAnswer: {},
+      })
+      .expect(400);
   });
 });
