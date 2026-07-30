@@ -552,4 +552,20 @@ describe('Core flows (e2e)', () => {
       .send({ email, password: 'password123' })
       .expect(401);
   });
+
+  it('13: an invalid enum query param returns 400, not a raw Prisma error', async () => {
+    const { accessToken: adminToken } = await makeAdmin(
+      `admin13_${suffix}@test.dev`,
+    );
+
+    await request(server())
+      .get('/users?role=NOT_A_REAL_ROLE')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(400);
+
+    await request(server())
+      .get('/questions?status=NOT_A_REAL_STATUS')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(400);
+  });
 });
