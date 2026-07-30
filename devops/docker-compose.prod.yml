@@ -1,21 +1,29 @@
-# Compose profile dành cho production — khác docker-compose.yml (dev) ở 3 điểm:
+# Compose profile dành cho production — khác docker-compose.yml (dev) ở 4 điểm:
 # 1) build target "production" cho cả backend/frontend thay vì "dev" (không mount
 #    source code, không hot-reload).
-# 2) Chỉ Nginx (frontend) mở cổng ra ngoài — backend/postgres chỉ giao tiếp qua
-#    mạng nội bộ Compose, giảm bề mặt tấn công.
+# 2) Chỉ Caddy mở cổng ra ngoài (80/443) — frontend/backend/postgres chỉ giao
+#    tiếp qua mạng nội bộ Compose, giảm bề mặt tấn công.
 # 3) Frontend Nginx tự reverse-proxy /api sang backend (xem frontend/nginx.conf)
 #    nên KHÔNG cần VITE_DEV_PROXY_TARGET (đó là biến chỉ dùng cho Vite dev server).
+# 4) Caddy đứng trước Nginx làm TLS termination (Let's Encrypt tự động, xem
+#    devops/Caddyfile) + redirect HTTP->HTTPS + HSTS — nếu chạy Compose này mà
+#    truy cập qua HTTP thuần, cookie refreshToken Secure (bật khi
+#    NODE_ENV=production, xem backend/src/main.ts) sẽ KHÔNG được trình duyệt
+#    gửi lên và đăng nhập không hoạt động.
 #
-# Chạy: docker compose -f devops/docker-compose.prod.yml up -d --build
-# Yêu cầu: backend/.env đã điền đủ secret thật (JWT_*, GEMINI_API_KEY nếu cần...)
-# và NODE_ENV=production để bật cookie Secure + tắt Swagger (xem backend/src/main.ts).
+# Chạy: docker compose -f devops/docker-compose.prod.yml --env-file devops/.env.prod up -d --build
+# Yêu cầu:
+# - backend/.env đã điền đủ secret thật (JWT_*, GEMINI_API_KEY nếu cần...) và
+#   NODE_ENV=production, TRUST_PROXY_HOPS=2 (Caddy + Nginx đứng trước backend).
+# - devops/.env.prod đã điền DOMAIN (trỏ DNS về máy này, cổng 80/443 mở ra
+#   Internet) và POSTGRES_PASSWORD thật — xem devops/.env.prod.example.
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: edupath
-      POSTGRES_PASSWORD: edupath
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD chưa được đặt — xem devops/.env.prod.example}
       POSTGRES_DB: edupath
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -44,7 +52,7 @@ services:
     env_file:
       - ../backend/.env
     environment:
-      DATABASE_URL: postgresql://edupath:edupath@postgres:5432/edupath?schema=public
+      DATABASE_URL: postgresql://edupath:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD chưa được đặt}@postgres:5432/edupath?schema=public
       REDIS_HOST: redis
       NODE_ENV: production
     depends_on:
@@ -70,12 +78,27 @@ services:
       context: ../frontend
       target: production
     restart: unless-stopped
-    ports:
-      - "80:80"
     depends_on:
       backend:
         condition: service_healthy
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN chưa được đặt — xem devops/.env.prod.example}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
 volumes:
   postgres_data:
   redis_data:
+  caddy_data:
+  caddy_config:

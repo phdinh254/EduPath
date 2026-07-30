@@ -1,0 +1,11 @@
+{$DOMAIN} {
+	# Caddy tự lấy chứng chỉ Let's Encrypt cho DOMAIN, tự redirect HTTP->HTTPS,
+	# và tự thêm header bảo mật cơ bản (không cần cấu hình tay như Nginx thuần).
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	reverse_proxy frontend:80
+}
