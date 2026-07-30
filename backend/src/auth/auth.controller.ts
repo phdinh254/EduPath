@@ -140,7 +140,7 @@ export class AuthController {
     // KHÔNG đặt accessToken/refreshToken vào query string (bị log ở
     // proxy/trình duyệt/lịch sử) — chỉ redirect kèm một mã dùng một lần,
     // frontend đổi mã lấy token thật qua POST /auth/oauth/exchange.
-    const code = this.oauthExchange.create(
+    const code = await this.oauthExchange.create(
       tokens.accessToken,
       tokens.refreshToken,
     );
@@ -166,11 +166,11 @@ export class AuthController {
       'Trả về accessToken; refreshToken được đặt vào cookie HttpOnly.',
   })
   @ApiResponse({ status: 401, description: 'Mã không hợp lệ hoặc đã hết hạn.' })
-  exchangeOAuthCode(
+  async exchangeOAuthCode(
     @Body() dto: OAuthExchangeDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const tokens = this.oauthExchange.redeem(dto.code);
+    const tokens = await this.oauthExchange.redeem(dto.code);
     if (!tokens) {
       throw new UnauthorizedException(
         'Mã đăng nhập không hợp lệ hoặc đã hết hạn',
